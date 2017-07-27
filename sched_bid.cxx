@@ -14,32 +14,7 @@ string userNameStr;
 string passwordStr;
 string ipStr;
 string logPathStr;
-string sd2sj[]={"00:15","00:30","00:45",
-		"01:00","01:15","01:30","01:45",
-		"02:00","02:15","02:30","02:45",
-		"03:00","03:15","03:30","03:45",
-		"04:00","04:15","04:30","04:45",
-		"05:00","05:15","05:30","05:45",
-		"06:00","06:15","06:30","06:45",
-		"07:00","07:15","07:30","07:45",
-		"08:00","08:15","08:30","08:45",
-		"09:00","09:15","09:30","09:45",
-		"10:00","10:15","10:30","10:45",
-		"11:00","11:15","11:30","11:45",
-		"12:00","12:15","12:30","12:45",
-		"13:00","13:15","13:30","13:45",
-		"14:00","14:15","14:30","14:45",
-		"15:00","15:15","15:30","15:45",
-		"16:00","16:15","16:30","16:45",
-		"17:00","17:15","17:30","17:45",
-		"18:00","18:15","18:30","18:45",
-		"19:00","19:15","19:30","19:45",
-		"20:00","20:15","20:30","20:45",
-		"21:00","21:15","21:30","21:45",
-		"22:00","22:15","22:30","22:45",
-		"23:00","23:15","23:30","23:45",
-		"24:00"
-};
+
 CDmDb *dmdb;
 double fhycxzGloble[SDNUM+1];//负荷预测修正
 double llxjhGloble[SDNUM+1];//联络线计划
@@ -280,9 +255,9 @@ void setBid()
 		mp->pnt[2].y = 1;
 
 		double everyStep = mp->mwmin/rampSd;
-		for(int j=0;j<=rampSd;j++)
+		for(int j=1;j<=rampSd;j++)
 		{
-			mp->rampdn[j] = mp->mwmin-everyStep*j;
+			mp->rampdn[j] = mp->mwmin-everyStep*(j-1);
 			mp->rampup[j] = everyStep*j;
 		}
 		mp = mp->next;
@@ -438,6 +413,8 @@ void writeToDb(string strDate)
 	cout<<"插入"<<numInsert<<"条数据"<<endl;
 }
 
+
+
 /**
  * 将时间信息转化为开停机数组
  * 例如：
@@ -453,15 +430,12 @@ void convertAndSetKtj(string startDateTime,string endDateTime,string strDate,lon
 {
 	string startDate = startDateTime.substr(0,10);
 	string startTime = startDateTime.substr(11,5);
-	int startTimeHour = atoi(startTime.substr(0,2).c_str());
-	int startTimeMin = atoi(startTime.substr(3,2).c_str());
+
 	string endDate = endDateTime.substr(0,10);
 	string endTime = endDateTime.substr(11,5);
-	int endTimeHour = atoi(endTime.substr(0,2).c_str());
-	int endTimeMin = atoi(endTime.substr(3,2).c_str());
-	int sdEveryHour = ktjnum/24;
-	int minEverySd = 60/sdEveryHour;
 
+	int pointStart = sj2sd(startTime,ktjnum);
+	int pointEnd = sj2sd(endTime,ktjnum);
 	//初始化
 	for(int i=1;i<=ktjnum;i++){
 		ktj[i]=1;
@@ -474,37 +448,20 @@ void convertAndSetKtj(string startDateTime,string endDateTime,string strDate,lon
 		}
 	}else if(startDate.compare(strDate)==0&&endDate.compare(strDate)==0)//这种情况不存在,开机转停机再转开机
 	{
-		int point1 = startTimeHour*sdEveryHour+startTimeMin/minEverySd;
-		int point2 = endTimeHour*sdEveryHour+endTimeMin/minEverySd;
-//		for(int i=1;i<point1;i++)
-//			ktj[i] = 1;
-//		for(int i=point2+1;i<=ktjnum;i++)
-//			ktj[i] = 1;
-		for(int i=point1;i<=point2;i++)
+		for(int i=pointStart;i<=pointEnd;i++)
 		{
 			ktj[i] = 0;
 		}
 	}else if(startDate.compare(strDate)==0)//由开机转停机
 	{
-		int point = startTimeHour*sdEveryHour+startTimeMin/minEverySd;
-//		for(int i=1;i<point;i++)
-//			ktj[i] = 1;
-		for(int i=point;i<=ktjnum;i++)
+		for(int i=pointStart;i<=ktjnum;i++)
 			ktj[i] = 0;
 
 	}else if(endDate.compare(strDate)==0)//由停机转开机
 	{
-		int point = endTimeHour*sdEveryHour+endTimeMin/minEverySd;
-//		for(int i=point+1;i<=ktjnum;i++)
-//			ktj[i] = 1;
-		for(int i=1;i<=point;i++)
+		for(int i=1;i<=pointEnd;i++)
 			ktj[i] = 0;
 	}
-	for(int i=1;i<=SDNUM;i++)
-	{
-		cout<<ktj[i]<<" ";
-	}
-
 }
 /**
  * 打印算法输入数据
@@ -572,6 +529,11 @@ void printAllDate()
 		{
 			cout<<mp->rampup[i]<<" ";
 		}
+		cout<<endl<<"出力：";
+		for(int i=0;i<=rampSd;i++)
+		{
+			cout<<mp->mw[i]<<" ";
+		}
 		cout<<endl;
 		cout<<endl;
 		cout<<endl;
@@ -583,6 +545,8 @@ void printAllDate()
 }
 int main(long argc,char **argv)
 {
+	int sd = sj2sd("01:45",96);
+	cout<<sd<<endl;
 	string strDate = argv[1];
 
 	readConfig();

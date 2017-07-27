@@ -3,7 +3,8 @@
 #include"common.h"
 #include"psched.h"
 #include"math.h"
-
+#include<iostream>
+using namespace::std;
 //globals
 struct fixstr *fixbasData;
 struct fixstr *fixcrvData;
@@ -39,7 +40,45 @@ double wload0     [100];//system loads
 double wload      [100];
 double micPrice   [100];
 double mwStep;
+string sd2sj[]={"00:15","00:30","00:45",
+		"01:00","01:15","01:30","01:45",
+		"02:00","02:15","02:30","02:45",
+		"03:00","03:15","03:30","03:45",
+		"04:00","04:15","04:30","04:45",
+		"05:00","05:15","05:30","05:45",
+		"06:00","06:15","06:30","06:45",
+		"07:00","07:15","07:30","07:45",
+		"08:00","08:15","08:30","08:45",
+		"09:00","09:15","09:30","09:45",
+		"10:00","10:15","10:30","10:45",
+		"11:00","11:15","11:30","11:45",
+		"12:00","12:15","12:30","12:45",
+		"13:00","13:15","13:30","13:45",
+		"14:00","14:15","14:30","14:45",
+		"15:00","15:15","15:30","15:45",
+		"16:00","16:15","16:30","16:45",
+		"17:00","17:15","17:30","17:45",
+		"18:00","18:15","18:30","18:45",
+		"19:00","19:15","19:30","19:45",
+		"20:00","20:15","20:30","20:45",
+		"21:00","21:15","21:30","21:45",
+		"22:00","22:15","22:30","22:45",
+		"23:00","23:15","23:30","23:45",
+		"24:00"
+};
 ////////////////////////////////////////////////////////////
+int sj2sd(string strTime,int sdEveryDay)
+{
+	int hour = atoi(strTime.substr(0,2).c_str());
+	int minute = atoi(strTime.substr(3,2).c_str());
+
+	int sdEveryHour = sdEveryDay/24;
+	int minEverySd = 60/sdEveryHour;
+
+	int sdNO = sdEveryHour*hour + minute/minEverySd + 1;
+	return sdNO;
+}
+
 /**
  * use the weight to resched the power
  * mw0 is the init power without weight(justice divide)
@@ -50,8 +89,10 @@ void wtSched(double *mw,double *mw0,long micNum,long sd)
 	double sum_dnSpace=0;
 	double sum_dmw = 0.0;//wt!=1,
 	struct micstr *mp=micData;
+
+	//rampFlag_fun(micData,sd);
 	for(long i=1;i<=micNum;i++,mp=mp->next)
-	if(mp->rampFlag==0)////////////////////////////////////不是开停机才能调整
+	if(mp->rampFlag==0&&mp->stat[sd]!=0)////////////////////////////////////不是开停机才能调整
 	{
 		if(fabs(mp->wt-1.0)<SMLL)
 		{
@@ -65,6 +106,9 @@ void wtSched(double *mw,double *mw0,long micNum,long sd)
 			mw[i]=max(mw[i],mp->mwmin);
 			sum_dmw+= mw[i]-mw0[i];
 		}
+	}else
+	{
+		mw[i]  = mw0[i];
 	}
 	////////////////////////////////////////////////////////////
 
@@ -73,7 +117,7 @@ void wtSched(double *mw,double *mw0,long micNum,long sd)
 	printf("\n sum_dmw    =%lf",sum_dmw);
 	mp=micData;
 	for(long i=1;i<=micNum;i++,mp=mp->next)
-	if(mp->rampFlag==0)/////////////不是开停机才能调整
+	if(mp->rampFlag==0&&mp->stat[sd]!=0)/////////////不是开停机才能调整
 	{
 		if(fabs(mp->wt-1.0)<SMLL)
 		{
@@ -122,7 +166,7 @@ double micSched(double *mw,double *wload,long sd)
 	struct micstr *mp=micData;
 	for(long i=1;i<=micNum;i++,mp=mp->next)//-1-ramping sd
 	{
-		if(mp->rampFlag==1) mw[i]=mp->mw[sd];
+		if(mp->rampFlag==1)	mw[i]=mp->mw[sd];
 		else                mw[i]=mp->mwmin;
 	}
 	////////////////////////////////////////////////////////////
@@ -160,14 +204,33 @@ double micSched(double *mw,double *wload,long sd)
 
 	return 0;
 }
+void printWm()
+{
+	struct micstr *mp=micData;
+	while(mp!=NULL)
+	{
+		cout<<"id:"<<mp->id<<endl;
+		cout<<"name:"<<mp->descr<<endl;
+		cout<<endl<<"出力：";
+		for(int i=0;i<=sdnum;i++)
+		{
+			cout<<mp->mw[i]<<" ";
+		}
+		cout<<endl;
+		mp=mp->next;
+	}
 
+
+}
 void bid_sched()
 {
 	rampSched();
-	double mw0[1000];
-	double mw[1000];
+	printWm();
+
 	for(long sd=sd1;sd<=sdnum;sd++)
 	{
+		double mw0[1000]={0};
+		double mw[1000]={0};
 		micPrice[sd] = micSched(mw0,wload,sd);//mw,price
 		wtSched(mw,mw0,micNum,sd);
 
@@ -428,7 +491,7 @@ void rampSched()
 		{
 			if(mp->stat[i]==0 && mp->stat[i+1]==1)
 			for(long k=1;k<=rampSd;k++)
-				mp->mw[i+k-1]=min(mp->mwmin,mp->rampup[k]);
+				mp->mw[i+k]=min(mp->mwmin,mp->rampup[k]);
 		}
 		////////////////////////////////////////////////////////////
 		
@@ -436,7 +499,7 @@ void rampSched()
 		{
 			if(mp->stat[i]==0 && mp->stat[i-1]==1)
 			for(long k=1;k<=rampSd;k++)
-			mp->mw[i+k-rampSd]=min(mp->mwmin,mp->rampdn[k]);
+			mp->mw[i+k-rampSd-1]=min(mp->mwmin,mp->rampdn[k]);
 		}	mp=mp->next;
 	}
 	////////////////////////////////////////////////////////////
@@ -501,7 +564,7 @@ bool isrampUp(long *stat,long sd)
 
 	for(long i=1;i<sdnum;i++)
 	if(stat[i]==0 && stat[i+1]==1)
-	if(interv(sd,i,i+rampSd)) return true;
+	if(interv(sd,i+1,i+rampSd)) return true;
 	////////////////////////////////////////////////////////////
 
 	return false;
@@ -511,7 +574,7 @@ bool isrampDn(long *stat,long sd)
 {
 	for(long i=1;i<=sdnum;i++)
 	if(stat[i]==0 && stat[i-1]==1)
-	if(interv(sd,i,i-rampSd)) return true;
+	if(interv(sd,i-1,i-rampSd)) return true;
 	////////////////////////////////////////////////////////////
 
 	return false;

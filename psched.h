@@ -8,6 +8,9 @@
 #include<ctype.h>
 #include<math.h>
 #include<time.h>
+#include<string>
+using namespace::std;
+
 #define  FIXBAS  1 //type
 #define  FIXCRV  2
 #define  FIXMTH  3
@@ -57,6 +60,7 @@ struct micstr//micro-inc
 }; 
 ////////////////////////////////////////////////////////////
 //function prototypes
+int sj2sd(string strTime,int sdEveryDay);
 double mp1fun(double mw,double mw2,double mp0);
 double mp2fun(double mw,double mw2,double mp0);
 double mp3fun(double mw,double mw2,double mp0);
@@ -115,6 +119,7 @@ void unitSched (double *wgen,double *wload,long sd1,long sdnum,struct fixstr *fp
 void unitSched2(double *pump,double *wload,long sd1,long sdnum);
 ////////////////////////////////////////////////////////////
 //globals
+extern string sd2sj[];
 extern struct fixstr *fixbasData;
 extern struct fixstr *fixcrvData;
 extern struct fixstr *fixmthData;

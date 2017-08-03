@@ -5,11 +5,12 @@
 #include "dmdb.h"
 #include <iostream>
 #include<map>
-#include"inifile.h"
+#include"operate_config.h"
 using namespace::std;
 //定义为时段数+1
 #define SDNUM 96
 #define SQLSTRLEN 2048
+#define paraSize 5
 string userNameStr;
 string passwordStr;
 string ipStr;
@@ -23,6 +24,7 @@ double sdjhGloble[SDNUM+1];//水调计划
 double ddljhGlobel[SDNUM+1];//定电量输入负荷
 double dqxjhGlobel[SDNUM+1];//定曲线计划
 double bidFhInput[SDNUM+1];//竞价负荷输入
+const char Config[] = "db.ini";
 void convertAndSetKtj(string startDateTime,string endDateTime,string strDate,long ktj[],int ktjnum);
 ////////////////////////////////////////////////////////////
 
@@ -31,11 +33,19 @@ void convertAndSetKtj(string startDateTime,string endDateTime,string strDate,lon
  */
 void readConfig()
 {
-	CIniFile iniFile("./db.ini");
-	userNameStr = iniFile.GetStrValue("dmdb","userName");
-	passwordStr =  iniFile.GetStrValue("dmdb","password");
-	ipStr =  iniFile.GetStrValue("dmdb","ip");
-	logPathStr = iniFile.GetStrValue("dmdb","logPath");
+	// 读配置文件，失败返回一个 异常类对象
+	try {
+		// Code that could throw an exception
+		ConfigHandle.init(Config);
+	}
+	catch (operatorconfig::File_not_found &filenf) {
+		std::cerr << "**Warring: Attemped to open no exist file <" << filenf.filename << ">." << std::endl;
+		exit(98);
+	}
+	userNameStr = ConfigHandle.read("userName",userNameStr);
+	passwordStr = ConfigHandle.read("password",passwordStr);
+	ipStr = ConfigHandle.read("ip",ipStr);
+	logPathStr = ConfigHandle.read("logPath",logPathStr);
 }
 
 /**
@@ -44,8 +54,8 @@ void readConfig()
 void readAlgorithmPara()
 {
 
-	string paraSql = "select TYPEC,SVALUE from HLJJHDB.HLJJHDB.ALGPARA \
-	        where TYPEA='FDJH' AND TYPEB='BID'";
+	string paraSql = "SELECT CSID,CSSZ FROM HLJJHDB.HLJJHDB.XTCS "
+				"WHERE CSLX='BID'";
 	long long retRedNum = dmdb->exec_select(paraSql.c_str(), 2, "读取算法参数");
 
 	map<string,string> paraMap;
@@ -55,12 +65,16 @@ void readAlgorithmPara()
 		string valStr = dmdb->get_select_data(i,1);
 		paraMap[typeStr]= valStr;
 	}
-
-	mwStep=atof(paraMap["mwStep"].c_str());
-	pntNum=atoi(paraMap["pntNum"].c_str());
-	rampSd=atoi(paraMap["rampSd"].c_str());
-	sdnum =atoi(paraMap["sdnum"].c_str());
-	sd1   =atoi(paraMap["sd1"].c_str());
+	if(paraMap.size()<paraSize)
+	{
+		cout<<"####数据库中算法参数数量小于需求"<<endl;
+		exit(211);
+	}
+	mwStep=atof(paraMap["BID_mwStep"].c_str());
+	pntNum=atoi(paraMap["BID_pntNum"].c_str());
+	rampSd=atoi(paraMap["BID_rampSd"].c_str());
+	sdnum =atoi(paraMap["BID_sdnum"].c_str());
+	sd1   =atoi(paraMap["BID_sd1"].c_str());
 
 }
 
@@ -75,7 +89,7 @@ void readFhl(string strDate)
 	long retRedNum = -1;
 	retRedNum = dmdb->exec_select(fhycxzSql.c_str(), 2, "读取负荷预测修正数据");
 	if(retRedNum!=SDNUM){
-		cout<<"负荷预测数据有问题"<<endl;
+		cout<<"####负荷预测数据有问题"<<endl;
 		exit(-200);//负荷预测数据有问题
 	}
 	printf("id              name\n");
@@ -93,7 +107,7 @@ void readFhl(string strDate)
 
 	retRedNum = dmdb->exec_select(llxjhSql.c_str(), 2, "读取联络线计划数据");
 	if(retRedNum!=SDNUM){
-		cout<<"联络线计划数据有问题"<<endl;
+		cout<<"####联络线计划数据有问题"<<endl;
 		exit(-201);//联络线计划数据有问题
 	}
 	for(int i=0;i<retRedNum;i++)
@@ -121,7 +135,7 @@ void readFhl(string strDate)
 			xnyycGloble[sdInt]= valDouble;
 		}
 	}else{
-		cout<<"新能源预测数据有问题"<<endl;
+		cout<<"####新能源预测数据有问题"<<endl;
 		exit(-202);//新能源预测数据有问题
 	}
 
@@ -139,7 +153,7 @@ void readFhl(string strDate)
 			sdjhGloble[sdInt]= valDouble;
 		}
 	}else{
-		cout<<"水调计划数据有问题"<<endl;
+		cout<<"####水调计划数据有问题"<<endl;
 		exit(-203);//新能源预测数据有问题
 	}
 
@@ -157,7 +171,7 @@ void readFhl(string strDate)
 			ddljhGlobel[sdInt]= valDouble;
 		}
 	}else{
-		cout<<"定电量发电计划数据有问题"<<endl;
+		cout<<"####定电量发电计划数据有问题"<<endl;
 		exit(-204);//新能源预测数据有问题
 	}
 
@@ -175,7 +189,7 @@ void readFhl(string strDate)
 			dqxjhGlobel[sdInt]= valDouble;
 		}
 	}else{
-		cout<<"定曲线发电计划数据有问题"<<endl;
+		cout<<"####定曲线发电计划数据有问题"<<endl;
 		exit(-205);//新能源预测数据有问题
 	}
 
@@ -191,23 +205,25 @@ void readFhl(string strDate)
 /**
  *读取权重系数
  */
-void readQzxs()
+void readQzxs(string strDate)
 {
 	long retRedNum = 0;
 
-	string maxRqInQzxs = "select max(rq) from HLJJHDB.HLJJHDB.QZXS";
+	string maxRqInQzxs = "select max(rq) from HLJJHDB.HLJJHDB.QZXS WHERE RQ<='"+strDate+"'";
 	retRedNum = dmdb->exec_select(maxRqInQzxs.c_str(), 1, "读取权重系数最大日期");
 	if(retRedNum<=0){
-		cout<<"权重系数日期有问题"<<endl;
+		cout<<"####权重系数日期有问题"<<endl;
 		exit(-206);
 	}
 	string maxRq = dmdb->get_select_data(0,0);
 
 	string jzRddlSql = "select sid,sname,qzxs from HLJJHDB.HLJJHDB.QZXS "
-				"where rq='"+maxRq+"'";
+				"where rq='"+maxRq+"' and SID NOT IN "
+				"(select DISTINCT(SID) from HLJJHDB.HLJJHDB.DQXJH "
+						"WHERE RQ='"+strDate+"')";
 	retRedNum = dmdb->exec_select(jzRddlSql.c_str(), 3, "读取权重系数");
 	if(retRedNum<=0){
-		cout<<"权重系数有问题"<<endl;
+		cout<<"####权重系数有问题"<<endl;
 		exit(-207);
 	}
 
@@ -316,14 +332,14 @@ void readKtj(string strDate)
 /**
  * 向机组结构中注入功率限值
  */
-void readGlxz()
+void readGlxz(string strDate)
 {
 	long retRedNum = 0;
 
-	string maxRqInGlxz = "select max(rq) from HLJJHDB.HLJJHDB.GLXZ";
+	string maxRqInGlxz = "select max(rq) from HLJJHDB.HLJJHDB.GLXZ where rq<='"+strDate+"'";
 	retRedNum = dmdb->exec_select(maxRqInGlxz.c_str(), 1, "读取功率限值最大日期");
 	if(retRedNum<=0){
-		cout<<"功率限值最大日期有问题"<<endl;
+		cout<<"####功率限值最大日期有问题"<<endl;
 		exit(-208);
 	}
 	string maxRq = dmdb->get_select_data(0,0);
@@ -333,7 +349,7 @@ void readGlxz()
 
 	retRedNum = dmdb->exec_select(glxzSql.c_str(), 4, "读取功率限值");
 	if(retRedNum<=0){
-		cout<<"功率限值有问题"<<endl;
+		cout<<"####功率限值有问题"<<endl;
 		exit(-209);
 	}
 
@@ -368,8 +384,8 @@ void readAllDataFromDb(string strDate)
 
 	readAlgorithmPara();
 	readFhl(strDate);
-	readQzxs();
-	readGlxz();
+	readQzxs(strDate);
+	readGlxz(strDate);
 	setBid();
 	readKtj(strDate);
 
@@ -468,7 +484,6 @@ void convertAndSetKtj(string startDateTime,string endDateTime,string strDate,lon
  */
 void printAllDate()
 {
-
 	cout<<"fhycxzGloble:";
 	for(int i=1;i<SDNUM;i++)
 	{
@@ -508,6 +523,7 @@ void printAllDate()
 	}
 	cout<<endl;
 	struct micstr *mp = micData;
+	double clxx = 0;
 	while(mp!=NULL)
 	{
 		cout<<mp->id<<endl;
@@ -542,11 +558,21 @@ void printAllDate()
 
 		mp = mp->next;
 	}
+	mp = micData;
+	while(mp!=NULL)
+	{
+		if(mp->stat[2]!=0)
+		{
+
+			clxx+=mp->mwmin;
+			cout<<mp->descr<<"	"<<mp->mwmin<<endl;
+		}
+		mp=mp->next;
+	}
+	cout<<"2时段："<<clxx<<endl;
 }
 int main(long argc,char **argv)
 {
-	int sd = sj2sd("01:45",96);
-	cout<<sd<<endl;
 	string strDate = argv[1];
 
 	readConfig();
@@ -555,11 +581,9 @@ int main(long argc,char **argv)
 	int initRet = dmdb->init_database();
 	if(initRet!=0)
 	{
-		cout<<"数据库初始化失败"<<endl;
+		cout<<"####数据库初始化失败"<<endl;
 		exit(99);
 	}
-
-
 
 	bid_start("sched02");
 	readAllDataFromDb(strDate);
@@ -569,9 +593,10 @@ int main(long argc,char **argv)
 	bid_sched   ();
 	writeToDb(strDate.c_str());
 	bid_report  ();
-	printf("\n\nSuccess!\n");
 	////////////////////////////////////////////////////////////
 	delete(dmdb);
+	printf("\n\n");
+	printf("####算法完成\n");
 	return 0;
 }
 //end of file

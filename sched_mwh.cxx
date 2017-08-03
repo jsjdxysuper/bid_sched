@@ -5,7 +5,8 @@
 #include "dmdb.h"
 #include <iostream>
 #include<map>
-#include"inifile.h"
+#include <stdlib.h>
+#include"operate_config.h"
 using namespace::std;
 //定义为时段数+1
 #define SDNUM 96
@@ -21,17 +22,27 @@ double llxjhGloble[SDNUM+1];//联络线计划
 double xnyycGloble[SDNUM+1];//新能源预测
 double sdjhGloble[SDNUM+1];//水调计划
 double ddljhInputFl[SDNUM+1];//定电量输入负荷
-
+const char Config[] = "db.ini";
 /**
  * 读取数据库配置
  */
 void readConfig()
 {
-	CIniFile iniFile("./db.ini");
-	userNameStr = iniFile.GetStrValue("dmdb","userName");
-	passwordStr =  iniFile.GetStrValue("dmdb","password");
-	ipStr =  iniFile.GetStrValue("dmdb","ip");
-	logPathStr = iniFile.GetStrValue("dmdb","logPath");
+
+	// 读配置文件，失败返回一个 异常类对象
+	try {
+		// Code that could throw an exception
+		ConfigHandle.init(Config);
+	}
+	catch (operatorconfig::File_not_found &filenf) {
+		std::cerr << "**Warring: Attemped to open no exist file <" << filenf.filename << ">." << std::endl;
+		exit(CONFIG_FILE_NOTFOUND);
+	}
+	userNameStr = ConfigHandle.read("userName",userNameStr);
+	passwordStr = ConfigHandle.read("password",passwordStr);
+	ipStr = ConfigHandle.read("ip",ipStr);
+	logPathStr = ConfigHandle.read("logPath",logPathStr);
+
 }
 
 /**
@@ -39,8 +50,8 @@ void readConfig()
  */
 void readAlgorithmPara()
 {
-	string paraSql = "select TYPEC,SVALUE from HLJJHDB.HLJJHDB.ALGPARA \
-	        where TYPEA='FDJH' AND TYPEB='DDLJH'";
+	string paraSql = "SELECT CSID,CSSZ FROM HLJJHDB.HLJJHDB.XTCS "
+				"WHERE CSLX='DDLJH'";
 	long long retRedNum = dmdb->exec_select(paraSql.c_str(), 2, "读取算法参数数据");
 
 	map<string,string> paraMap;
@@ -51,11 +62,11 @@ void readAlgorithmPara()
 		paraMap[typeStr]= valStr;
 	}
 
-	mwStep=atof(paraMap["mwStep"].c_str());
-	pntNum=atoi(paraMap["pntNum"].c_str());
-	rampSd=atoi(paraMap["rampSd"].c_str());
-	sdnum =atoi(paraMap["sdnum"].c_str());
-	sd1   =atoi(paraMap["sd1"].c_str());
+	mwStep=atof(paraMap["DDLJH_mwStep"].c_str());
+	pntNum=atoi(paraMap["DDLJH_pntNum"].c_str());
+	rampSd=atoi(paraMap["DDLJH_rampSd"].c_str());
+	sdnum =atoi(paraMap["DDLJH_sdnum"].c_str());
+	sd1   =atoi(paraMap["DDLJH_sd1"].c_str());
 }
 
 /**
@@ -70,7 +81,7 @@ void readFhyc(string strDate)
 	retRedNum = dmdb->exec_select(fhycSql.c_str(), 2, "读取负荷预测数据");
 	if(retRedNum!=SDNUM){
 		cout<<"####负荷预测数据有问题"<<endl;
-		exit(-100);//负荷预测数据有问题
+		exit(LOAD_FORCAST_DATA_ERROR);//负荷预测数据有问题
 	}
 	printf("id              name\n");
 	for(int i=0;i<retRedNum;i++)
@@ -88,7 +99,7 @@ void readFhyc(string strDate)
 	retRedNum = dmdb->exec_select(llxjhSql.c_str(), 2, "读取联络线计划数据");
 	if(retRedNum!=SDNUM){
 		cout<<"####联络线计划数据有问题"<<endl;
-		exit(-101);//联络线计划数据有问题
+		exit(INTERCONECTION_DATA_ERROR);//联络线计划数据有问题
 	}
 	for(int i=0;i<retRedNum;i++)
 	{
@@ -116,7 +127,7 @@ void readFhyc(string strDate)
 		}
 	}else{
 		cout<<"####新能源预测数据有问题"<<endl;
-		exit(-102);//新能源预测数据有问题
+		exit(-NEW_ENERGY_DATA_ERRO);//新能源预测数据有问题
 	}
 
 	string sdjhSql = "select sd,sum(sz) from HLJJHDB.HLJJHDB.SDJH \
@@ -134,7 +145,7 @@ void readFhyc(string strDate)
 		}
 	}else{
 		cout<<"水电计划数据有问题"<<endl;
-		exit(-103);//新能源预测数据有问题
+		exit(WATER_SCHED_DATA);//新能源预测数据有问题
 	}
 
 	for(int i=1;i<=SDNUM;i++){
@@ -231,7 +242,7 @@ void writeToDb(string strDate)
 			int ret = dmdb->exec_sql(insertDdljhSql);
 			if(ret!=0)
 			{
-				cout<<"插入数据出错"<<endl;
+				cout<<"####插入数据出错"<<endl;
 				exit(106);
 			}else
 				insertNum++;
@@ -260,6 +271,7 @@ void algrithm(string strDate)
 }
 int main(long argc,char **argv)
 {
+//	int sd = sj2sd("23:45",96);
 	string strDate = argv[1];
 	readConfig();
 

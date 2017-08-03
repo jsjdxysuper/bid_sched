@@ -1,8 +1,8 @@
 compileFlag:= -w -g -O0
 inc:=-I /opt/dmdbms/bin/include 
 lin:= -L /opt/dmdbms/bin -ldmapi
-object_bid=sched_bid.o psched.o common.o dmdb.o inifile.o
-object_dingdianliang = sched_mwh.o  psched.o common.o dmdb.o inifile.o
+object_bid=sched_bid.o psched.o common.o dmdb.o operate_config.o
+object_dingdianliang = sched_mwh.o  psched.o common.o dmdb.o operate_config.o
 all:bid_sched dingdianliang
 dingdianliang:$(object_dingdianliang)
 	g++ -o dingdianliang $(object_dingdianliang) $(compileFlag) $(lin)
@@ -18,7 +18,7 @@ common.o:common.cpp common.h
 	g++ -o common.o -c common.cpp $(compileFlag)
 dmdb.o:dmdb.cpp dmdb.h
 	g++ -o dmdb.o -c dmdb.cpp $(compileFlag) $(inc)
-inifile.o:inifile.cpp inifile.h
-	g++ -o inifile.o -c inifile.cpp $(compileFlag)
+operate_config.o:operate_config.cpp operate_config.h
+	g++ -o operate_config.o -c operate_config.cpp $(compileFlag)
 clean:
 	-rm $(object_bid) $(dingdianliang) bid_sched dingdianliang

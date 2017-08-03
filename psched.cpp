@@ -67,16 +67,45 @@ string sd2sj[]={"00:15","00:30","00:45",
 		"24:00"
 };
 ////////////////////////////////////////////////////////////
+
+
+
+void filter(const double *v0,double *v,long n,double tol)
+{
+	for(long i=1;i<=n;i++)
+	{
+		double vi=v0[i];
+		long pos = 0;
+		for(pos=i+1;pos<=n;pos++)
+			if(fabs(v0[pos]-vi)>tol) break;
+
+		long i2=min(i+MAX_SD2,pos)-1;
+		for(pos=i;pos<=i2;pos++)
+			v[pos]=avgfun(v0,i,i2);
+		i=i2;
+	}
+	////////////////////////////////////////////////////////////
+
+	return;
+}
+
 int sj2sd(string strTime,int sdEveryDay)
 {
 	int hour = atoi(strTime.substr(0,2).c_str());
 	int minute = atoi(strTime.substr(3,2).c_str());
+	int minuteEverySD = 24*60/sdEveryDay;
 
-	int sdEveryHour = sdEveryDay/24;
-	int minEverySd = 60/sdEveryHour;
-
-	int sdNO = sdEveryHour*hour + minute/minEverySd + 1;
-	return sdNO;
+	if(hour==0&&minute>=0&&minute<=15)
+		return 1;
+	else if(hour==23&&minute>=45&&minute<=59)
+		return 96;
+	else
+	{
+		if((hour*60+minute)%minuteEverySD>0)
+			return (hour*60+minute)/minuteEverySD+1;
+		else
+			return (hour*60+minute)/minuteEverySD;
+	}
 }
 
 /**
@@ -182,7 +211,10 @@ double micSched(double *mw,double *wload,long sd)
 		printf("\nError --- %ld",__LINE__);
 		printf("\n wload   =%lf, sd=%ld",wload[sd],sd);
 		printf("\n minSched=%lf",minSched[0]);
-		exit(0);
+		printf("\n");
+		printf("####在时段%d，时间：%s处不满足所有机组最小出力约束条件，修正后空间：%f,机组最小出力：%f",
+				sd,sd2sj[sd-1].c_str(),wload[sd],minSched[0]);
+		exit(212);
 	}
 	////////////////////////////////////////////////////////////
 
@@ -234,6 +266,7 @@ void bid_sched()
 		micPrice[sd] = micSched(mw0,wload,sd);//mw,price
 		wtSched(mw,mw0,micNum,sd);
 
+
 		grossMic[sd] = sum(mw,micNum);       //mw[0]
 		wload   [sd]-= sum(mw,micNum);
 		update(micData,mw,sd);
@@ -243,6 +276,11 @@ void bid_sched()
 	struct micstr *mp=micData;
 	while(mp!=NULL)
 	{
+//		double mw0[100];
+//		memcpy(mw0,mp->mw,100*sizeof(double));
+//
+//
+//		filter(mw0,mp->mw,sdnum,TOL);
 		mp->mwh=mwhfun(mp->mw,sdnum);
 		mp=mp->next;
 	}
@@ -302,6 +340,9 @@ void unitSched(double *wgen,double *wload,long sd1,long sdnum,struct fixstr *fp)
 		printf("\nWarning --- %ld",__LINE__);
 		printf("\n mwhmax=%lf, mwh0=%lf",mwhmax,fp->mwh0);
 		printf("\n mwhmin=%lf",mwhmin);
+		printf("\n");
+		printf("####%s设置电量不满足机组上下限，上限：%f,下限：%f，定电量：%f",fp->descr,mwhmax,mwhmin,fp->mwh0);
+		exit(109);
 	}
 	////////////////////////////////////////////////////////////
 
@@ -322,6 +363,9 @@ void unitSched(double *wgen,double *wload,long sd1,long sdnum,struct fixstr *fp)
 	return;
 }
 
+/**
+ * if some point of mwmin or mwmax equal 0, smooth the curve
+ */
 void sched_dataprep()
 {
 	struct fixstr *fp=fixbasData;

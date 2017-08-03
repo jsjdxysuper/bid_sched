@@ -10,13 +10,21 @@
 #include<time.h>
 #include<string>
 using namespace::std;
-
+#define MAX_SD2 10
+#define TOL 10
+////////////////////////////////////////////////////////////
 #define  FIXBAS  1 //type
 #define  FIXCRV  2
 #define  FIXMTH  3
 #define  HYDRO   4
 #define  PLANT   5
 ////////////////////////////////////////////////////////////
+#define CONFIG_FILE_NOTFOUND -1100
+#define LOAD_FORCAST_DATA_ERROR -1101
+#define INTERCONECTION_DATA_ERROR -1102
+#define NEW_ENERGY_DATA_ERRO -1103
+#define WATER_SCHED_DATA -1104
+///////////////////////////////////////////////////////////
 
 struct fixstr//fixed mwh
 {

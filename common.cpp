@@ -255,7 +255,7 @@ double sum(double **a,long m,long n)
 	return ret;
 }
 
-double sum(double *a,double x,long n)
+double sum(const double *a,double x,long n)
 {
 	double xx =1;//init
 	double ret=0;
@@ -1975,13 +1975,13 @@ long strncmp(char *str1,char *str2)
 	return ret;
 }
 
-double avgfun(double *v,long n)
+double avgfun(const double *v,long n)
 {
 	double ret=sum(v,n)/n;
 	return ret;
 }
 
-double avgfun(double *v,long i0,long n)
+double avgfun(const double *v,long i0,long n)
 {
 	double ret=sum(v,i0,n)/(n+1-i0);
 	return ret;
@@ -2125,20 +2125,20 @@ double fabssum(double v1,double v2)
 	return ret;
 }
 
-double sum(double *v,long n)
+double sum(const double *v,long n)
 {
 	double ret=sum(v,(long)1,n);
 	return ret;
 }
 
-double sum(double *v,long i0,long n)
+double sum(const double *v,long i0,long n)
 {
 	double ret=0;//init
 	for(long i=i0;i<=n;i++) ret+= v[i];
 	return ret;
 }
 
-double sum(double *v1,double *v2,long n)
+double sum(const double *v1,double *v2,long n)
 {
 	double ret=0;//init
 	for(long i=1;i<=n;i++)

@@ -5,6 +5,7 @@
 #include "dmdb.h"
 #include <iostream>
 #include<map>
+#include<vector>
 #include"operate_config.h"
 using namespace::std;
 //定义为时段数+1
@@ -75,6 +76,10 @@ void readAlgorithmPara()
 	rampSd=atoi(paraMap["BID_rampSd"].c_str());
 	sdnum =atoi(paraMap["BID_sdnum"].c_str());
 	sd1   =atoi(paraMap["BID_sd1"].c_str());
+
+	g_maxsdSpan = atoi(paraMap["BID_maxsdSpan"].c_str());
+	g_tol = atof(paraMap["BID_tol"].c_str());
+	g_balanceInitPowerRatio = atof(paraMap["BID_balanceInitPowerRatio"].c_str());
 
 }
 
@@ -216,11 +221,13 @@ void readQzxs(string strDate)
 		exit(-206);
 	}
 	string maxRq = dmdb->get_select_data(0,0);
-
+	//取出定曲线和平衡机组
 	string jzRddlSql = "select sid,sname,qzxs from HLJJHDB.HLJJHDB.QZXS "
 				"where rq='"+maxRq+"' and SID NOT IN "
 				"(select DISTINCT(SID) from HLJJHDB.HLJJHDB.DQXJH "
-						"WHERE RQ='"+strDate+"')";
+						"WHERE RQ='"+strDate+"' union "
+						"SELECT DISTINCT(SID) FROM HLJJHDB.HLJJHDB.PHJ "
+						"WHERE RQ=(SELECT MAX(RQ) FROM HLJJHDB.HLJJHDB.PHJ WHERE RQ<='"+strDate+"'))";
 	retRedNum = dmdb->exec_select(jzRddlSql.c_str(), 3, "读取权重系数");
 	if(retRedNum<=0){
 		cout<<"####权重系数有问题"<<endl;
@@ -240,13 +247,10 @@ void readQzxs(string strDate)
 
 
 		memset(mp,0,sizeof(struct micstr));
-		mp->i     =ia;
+		mp->i     =i;
 		sprintf(mp->id,"%s",sidStr.c_str());
 		sprintf(mp->descr,"%s",snameStr.c_str());
-		//此处填写权重系数
-//		mp->mwmax =fa;
-//		mp->mwmin =fb;
-//		mp->pntNum=pntNum; read_pnt(fp,mp->pnt);
+
 		mp->wt = atof(qzxsStr.c_str());
 		mp->next  =micData;
 		micData   =mp;
@@ -375,7 +379,46 @@ void readGlxz(string strDate)
 		}
 	}
 }
+void readBalanceGen(string strDate)
+{
+	vector<vector<string> >balanceGenId;
+	string phjMaxRqSql = "SELECT MAX(RQ) FROM HLJJHDB.HLJJHDB.PHJ WHERE RQ<='"+strDate+"'";
+	dmdb->exec_select(phjMaxRqSql.c_str(),1,"balance gen max date");
+	string phjMaxDateStr = dmdb->get_select_data(0,0);
+	string glxzMaxRqSql = "SELECT MAX(RQ) FROM HLJJHDB.HLJJHDB.GLXZ WHERE RQ<='"+strDate+"'";
+	dmdb->exec_select(glxzMaxRqSql.c_str(),1,"power limit max date");
+	string glxzMaxDateStr = dmdb->get_select_data(0,0);
+	string balanceSql = "SELECT PHJ.SID,GLXZ.SNAME,GLXZ.GLSX,GLXZ.GLXX FROM HLJJHDB.HLJJHDB.PHJ PHJ,HLJJHDB.HLJJHDB.GLXZ GLXZ "
+			"WHERE PHJ.SID=GLXZ.SID AND PHJ.RQ='"+phjMaxDateStr+"' AND GLXZ.RQ='"+glxzMaxDateStr+"'";
+	long rowNum = dmdb->exec_select(balanceSql.c_str(),4,"balance gen select");
 
+	for(int i=0;i<rowNum;i++)
+	{
+		struct micstr *mp=(struct micstr *)malloc(sizeof(struct micstr));
+		if(mp==NULL){ printf("\nError --- %ld",__LINE__); exit(0); }
+
+		string sidStr = dmdb->get_select_data(i,0);
+		string snameStr = dmdb->get_select_data(i,1);
+		string glsxStr = dmdb->get_select_data(i,2);
+		string glxxStr = dmdb->get_select_data(i,3);
+
+
+		memset(mp,0,sizeof(struct micstr));
+		mp->i     =i;
+		sprintf(mp->id,"%s",sidStr.c_str());
+		sprintf(mp->descr,"%s",snameStr.c_str());
+
+
+		mp->mwmax = atof(glsxStr.c_str());
+		mp->mwmin = atof(glxxStr.c_str());
+		mp->next  =balanceMicData;
+		balanceMicData   =mp;
+		balanceNum++;
+	}
+	reverse(balanceMicData);
+
+	initBalanceGen();//sub balance init power
+}
 /**
  * 读取算法所需数据，并填写全局变量
  */
@@ -388,6 +431,7 @@ void readAllDataFromDb(string strDate)
 	readGlxz(strDate);
 	setBid();
 	readKtj(strDate);
+	readBalanceGen(strDate);
 
 }
 
@@ -399,34 +443,99 @@ void writeToDb(string strDate)
 
 	string deleteRjzjh = "delete from HLJJHDB.HLJJHDB.RJZJH "
 			"where rq='"+strDate+"'";
+	string deleteRjzjh288 = "delete from HLJJHDB.HLJJHDB.RJZJH288 "
+			"where rq='"+strDate+"'";
 	int deleteNum = dmdb->exec_sql(deleteRjzjh.c_str());
+	cout<<"删除"<<deleteNum<<"条记录"<<endl;
+
+	deleteNum = dmdb->exec_sql(deleteRjzjh288.c_str());
 	cout<<"删除"<<deleteNum<<"条记录"<<endl;
 
 	char insertSqlStr[SQLSTRLEN];
 
-	long numInsert = 0;
+	long numInsert96 = 0;
+	long numInsert288 = 0;
+	double *mw288 = (double *)malloc(sizeof(double)*sdnum*3);
 	struct micstr *mp=micData;
 	while(mp!=NULL)
 	{
-		for(int i=1;i<=SDNUM;i++)
+		for(int i=1;i<=sdnum;i++)
 		{
 
 			sprintf(insertSqlStr,"INSERT INTO HLJJHDB.HLJJHDB.RJZJH(RQ,SJ,SD,SID,SNAME,SX,XX,SKT,XKT,GL) VALUES( "
 					"'%s','%s','%d','%s','%s','%f','%f','%f','%f','%f')",	strDate.c_str(),sd2sj[i-1].c_str(),i,mp->id,
 					mp->descr,mp->mwmax,mp->mwmin,mp->mwup[i],
 					mp->mwdn[i],mp->mw[i]);
+			printf(insertSqlStr);
 			int ret = dmdb->exec_sql(insertSqlStr);
 			if(ret!=0)
 			{
-				cout<<"插入数据出错"<<endl;
+				cout<<"插入数据出错，错误代码："<<ret<<endl;
 				exit(106);
 			}else
-				numInsert++;
+				numInsert96++;
 		}
-
+		memset(mw288,0,sizeof(double)*sdnum*3);
+		mpfun(mw288,mp->mw,sdnum);
+		for(int i=sd1;i<=sdnum*3;i++)
+		{
+			sprintf(insertSqlStr,"INSERT INTO HLJJHDB.HLJJHDB.RJZJH288(RQ,SJ,SD,SID,SNAME,SX,XX,SKT,XKT,GL) VALUES( "
+					"'%s','%s','%d','%s','%s','%f','%f','%f','%f','%f')",	strDate.c_str(),sd2sj288[i-1].c_str(),i,mp->id,
+					mp->descr,mp->mwmax,mp->mwmin,mp->mwmax-mw288[i-1],
+					mw288[i-1]-mp->mwmin,mw288[i-1]);
+			printf(insertSqlStr);
+			int ret = dmdb->exec_sql(insertSqlStr);
+			if(ret!=0)
+			{
+				cout<<"插入数据出错，错误代码："<<ret<<endl;
+				exit(106);
+			}else
+				numInsert288++;
+		}
 		mp=mp->next;
 	}
-	cout<<"插入"<<numInsert<<"条数据"<<endl;
+
+	mp=balanceMicData;
+	while(NULL!=mp)
+	{
+		for(int i=sd1;i<=sdnum;i++)
+		{
+			sprintf(insertSqlStr,"INSERT INTO HLJJHDB.HLJJHDB.RJZJH(RQ,SJ,SD,SID,SNAME,SX,XX,SKT,XKT,GL) VALUES( "
+					"'%s','%s','%d','%s','%s','%f','%f','%f','%f','%f')",	strDate.c_str(),sd2sj[i-1].c_str(),i,mp->id,
+					mp->descr,mp->mwmax,mp->mwmin,mp->mwup[i],
+					mp->mwdn[i],mp->mw[i]);
+			printf(insertSqlStr);
+			int ret = dmdb->exec_sql(insertSqlStr);
+			if(ret!=0)
+			{
+				cout<<"插入数据出错，错误代码："<<ret<<endl;
+				exit(106);
+			}else
+				numInsert96++;
+		}
+
+		memset(mw288,0,sizeof(double)*sdnum*3);
+		mpfun(mw288,mp->mw,sdnum);
+		for(int i=sd1;i<=sdnum*3;i++)
+		{
+			sprintf(insertSqlStr,"INSERT INTO HLJJHDB.HLJJHDB.RJZJH288(RQ,SJ,SD,SID,SNAME,SX,XX,SKT,XKT,GL) VALUES( "
+					"'%s','%s','%d','%s','%s','%f','%f','%f','%f','%f')",	strDate.c_str(),sd2sj288[i-1].c_str(),i,mp->id,
+					mp->descr,mp->mwmax,mp->mwmin,mp->mwmax-mw288[i-1],
+					mw288[i-1]-mp->mwmin,mw288[i-1]);
+			printf(insertSqlStr);
+			int ret = dmdb->exec_sql(insertSqlStr);
+			if(ret!=0)
+			{
+				cout<<"插入数据出错，错误代码："<<ret<<endl;
+				exit(106);
+			}else
+				numInsert288++;
+		}
+
+		mp = mp->next;
+	}
+	cout<<"96点计划插入"<<numInsert96<<"条数据"<<endl;
+	cout<<"288点计划插入"<<numInsert288<<"条数据"<<endl;
 }
 
 
@@ -570,6 +679,21 @@ void printAllDate()
 		mp=mp->next;
 	}
 	cout<<"2时段："<<clxx<<endl;
+
+	cout<<"-----------------------------------------------------"<<endl;;
+	cout<<"balance data"<<endl;
+	mp=balanceMicData;
+	while(NULL!=mp)
+	{
+		cout<<mp->id<<endl<<mp->descr<<endl;
+		cout<<"mwmax:"<<mp->mwmax<<",mwmin:"<<mp->mwmin<<endl;
+		for(int i=1;i<sdnum;i++)
+		{
+			cout<<mp->mw[i]<<",";
+		}
+		cout<<endl;
+		mp = mp->next;
+	}
 }
 int main(long argc,char **argv)
 {
@@ -587,10 +711,12 @@ int main(long argc,char **argv)
 
 	bid_start("sched02");
 	readAllDataFromDb(strDate);
+
 	printAllDate();
 //	bid_readdat ();
 	bid_dataprep();
 	bid_sched   ();
+	compensateLoad();
 	writeToDb(strDate.c_str());
 	bid_report  ();
 	////////////////////////////////////////////////////////////

@@ -10,8 +10,9 @@
 #include<time.h>
 #include<string>
 using namespace::std;
-#define MAX_SD2 10
-#define TOL 10
+extern int g_maxsdSpan;
+extern double g_tol;
+extern double g_balanceInitPowerRatio;
 ////////////////////////////////////////////////////////////
 #define  FIXBAS  1 //type
 #define  FIXCRV  2
@@ -68,6 +69,10 @@ struct micstr//micro-inc
 }; 
 ////////////////////////////////////////////////////////////
 //function prototypes
+void mpfun(double *mp,const double *mw,const int sdnum);
+void compensateLoad();
+void initBalanceGen();
+void filter(const double *v0,double *v,long n,struct micstr*mp);
 int sj2sd(string strTime,int sdEveryDay);
 double mp1fun(double mw,double mw2,double mp0);
 double mp2fun(double mw,double mw2,double mp0);
@@ -127,6 +132,7 @@ void unitSched (double *wgen,double *wload,long sd1,long sdnum,struct fixstr *fp
 void unitSched2(double *pump,double *wload,long sd1,long sdnum);
 ////////////////////////////////////////////////////////////
 //globals
+extern string sd2sj288[];
 extern string sd2sj[];
 extern struct fixstr *fixbasData;
 extern struct fixstr *fixcrvData;
@@ -134,6 +140,7 @@ extern struct fixstr *fixmthData;
 extern struct fixstr *hydroData;
 extern struct fixstr *plantData;
 extern struct micstr *micData;
+extern struct micstr *balanceMicData;
 ////////////////////////////////////////////////////////////
 
 extern long fixbasNum;
@@ -143,6 +150,7 @@ extern long hydroNum;
 extern long plantNum;
 extern long pntNum;
 extern long micNum;
+extern long balanceNum;
 extern long sd1;
 extern long sdnum;
 extern long rampSd;

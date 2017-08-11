@@ -9,10 +9,10 @@ using std::endl;
 static char buffer[MAXSIZE];
 static char mess_error[MAXSIZE];
 
-dm_henv henv;   //environment handle
-dm_hdbc hdbc;   //connection handle
-dm_hstmt hsmt;  // statement handle
-dm_bool sret;   //return code
+dm_henv henv=NULL;   //environment handle
+dm_hdbc hdbc = NULL;   //connection handle
+dm_hstmt hsmt = NULL;;  // statement handle
+dm_bool sret = NULL;;   //return code
 /********************************************
 * note: init database connection
 * return: false: -1, -2,-3,-4; true: 0
@@ -132,6 +132,16 @@ int CDmDb::exec_sql(const char* sql)
 {
     //alloc statement handle
     printf("alloc statement handle\n");
+    if(hsmt!=NULL)
+    {
+    	if(!dm_free_stmt(hsmt))
+    	{
+            memset(buffer, 0, sizeof(buffer));
+            strcpy(buffer, "free statement handle failure!\n");
+            write_log_file(m_cLogPath, FILE_MAX_SIZE, buffer, strlen(buffer));
+    	}
+    	hsmt=NULL;
+    }
     if(!dm_alloc_stmt(hdbc, &hsmt))
     {
         memset(buffer, 0, sizeof(buffer));
@@ -154,6 +164,16 @@ int CDmDb::exec_sql(const char* sql)
         write_log_file(m_cLogPath, FILE_MAX_SIZE, buffer, strlen(buffer));
         return -2;
     }
+
+    //free statement handle
+//    printf("free statement handle\n");
+//    if(!dm_free_stmt(hsmt))
+//    {
+//        memset(buffer, 0, sizeof(buffer));
+//        strcpy(buffer, "free statement handle failure!\n");
+//        write_log_file(m_cLogPath, FILE_MAX_SIZE, buffer, strlen(buffer));
+//    }
+//    hsmt=NULL;
     return 0;
 }
 

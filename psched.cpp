@@ -6,12 +6,17 @@
 #include<iostream>
 using namespace::std;
 //globals
+int g_maxsdSpan;
+double g_tol;
+double g_balanceInitPowerRatio;
+
 struct fixstr *fixbasData;
 struct fixstr *fixcrvData;
 struct fixstr *fixmthData;
 struct fixstr *hydroData;
 struct fixstr *plantData;
 struct micstr *micData;
+struct micstr *balanceMicData;
 ////////////////////////////////////////////////////////////
 
 long fixbasNum;
@@ -21,6 +26,7 @@ long hydroNum;
 long plantNum;
 long pntNum;
 long micNum;
+long balanceNum;
 long sd1;
 long sdnum;
 long rampSd;
@@ -66,20 +72,149 @@ string sd2sj[]={"00:15","00:30","00:45",
 		"23:00","23:15","23:30","23:45",
 		"24:00"
 };
+string sd2sj288[]={"00:05","00:10","00:15","00:20","00:25","00:30","00:35","00:40","00:45","00:50","00:55","01:00",
+		"01:05","01:10","01:15","01:20","01:25","01:30","01:35","01:40","01:45","01:50","01:55","02:00",
+		"02:05","02:10","02:15","02:20","02:25","02:30","02:35","02:40","02:45","02:50","02:55","03:00",
+		"03:05","03:10","03:15","03:20","03:25","03:30","03:35","03:40","03:45","03:50","03:55","04:00",
+		"04:05","04:10","04:15","04:20","04:25","04:30","04:35","04:40","04:45","04:50","04:55","05:00",
+		"05:05","05:10","05:15","05:20","05:25","05:30","05:35","05:40","05:45","05:50","05:55","06:00",
+		"06:05","06:10","06:15","06:20","06:25","06:30","06:35","06:40","06:45","06:50","06:55","07:00",
+		"07:05","07:10","07:15","07:20","07:25","07:30","07:35","07:40","07:45","07:50","07:55","08:00",
+		"08:05","08:10","08:15","08:20","08:25","08:30","08:35","08:40","08:45","08:50","08:55","09:00",
+		"09:05","09:10","09:15","09:20","09:25","09:30","09:35","09:40","09:45","09:50","09:55","10:00",
+		"10:05","10:10","10:15","10:20","10:25","10:30","10:35","10:40","10:45","10:50","10:55","11:00",
+		"11:05","11:10","11:15","11:20","11:25","11:30","11:35","11:40","11:45","11:50","11:55","12:00",
+		"12:05","12:10","12:15","12:20","12:25","12:30","12:35","12:40","12:45","12:50","12:55","13:00",
+		"13:05","13:10","13:15","13:20","13:25","13:30","13:35","13:40","13:45","13:50","13:55","14:00",
+		"14:05","14:10","14:15","14:20","14:25","14:30","14:35","14:40","14:45","14:50","14:55","15:00",
+		"15:05","15:10","15:15","15:20","15:25","15:30","15:35","15:40","15:45","15:50","15:55","16:00",
+		"16:05","16:10","16:15","16:20","16:25","16:30","16:35","16:40","16:45","16:50","16:55","17:00",
+		"17:05","17:10","17:15","17:20","17:25","17:30","17:35","17:40","17:45","17:50","17:55","18:00",
+		"18:05","18:10","18:15","18:20","18:25","18:30","18:35","18:40","18:45","18:50","18:55","19:00",
+		"19:05","19:10","19:15","19:20","19:25","19:30","19:35","19:40","19:45","19:50","19:55","20:00",
+		"20:05","20:10","20:15","20:20","20:25","20:30","20:35","20:40","20:45","20:50","20:55","21:00",
+		"21:05","21:10","21:15","21:20","21:25","21:30","21:35","21:40","21:45","21:50","21:55","22:00",
+		"22:05","22:10","22:15","22:20","22:25","22:30","22:35","22:40","22:45","22:50","22:55","23:00",
+		"23:05","23:10","23:15","23:20","23:25","23:30","23:35","23:40","23:45","23:50","23:55","24:00"
+};
 ////////////////////////////////////////////////////////////
-
-
-
-void filter(const double *v0,double *v,long n,double tol)
+/**
+ * 96 sd num to 288 sd num
+ * mw:input
+ * mp:output
+ * sdnum:old sd num
+ */
+void mpfun(double *mp,const double *mw,const int sdnum)
 {
+	for(int i=1;i<=sdnum;i++)
+	{
+		double mp1=mw[i]+(mw[max(1,i-1)]-mw[i])/3;
+		double mp2=mw[i];
+		double mp3=mw[i]+(mw[min(sdnum,i+1)]-mw[i])/3;
+		mp[3*(i-1)+1]=mp1;
+		mp[3*(i-1)+2]=mp2;
+		mp[3*(i-1)+3]=mp3;
+	}
+	////////////////////////////////////////////////////////////
+
+	return;
+}
+void compensateLoad()
+{
+	double wloadOffset[100];
+	double sechedWload[100];
+
+	double maxPowerOffsetSum[100];
+	double minPowerOffsetSum[100];
+
+	memset(wloadOffset,0,sizeof(double)*100);
+	memset(sechedWload,0,sizeof(double)*100);
+	memset(maxPowerOffsetSum,0,sizeof(double)*100);
+	memset(minPowerOffsetSum,0,sizeof(double)*100);
+	for(int i=sd1;i<=sdnum;i++)
+	{
+		struct micstr * mp = micData;
+		while(NULL!=mp)
+		{
+			sechedWload[i] += mp->mw[i];
+
+			mp = mp->next;
+		}
+	}
+
+	for(int i=sd1;i<=sdnum;i++)
+	{
+		wloadOffset[i] = wload0[i]-sechedWload[i];
+	}
+
+	for( int i=sd1;i<=sdnum;i++)
+	{
+		struct micstr * mp = balanceMicData;
+
+		while(NULL!=mp)
+		{
+			maxPowerOffsetSum[i] +=mp->mwup[i];
+			minPowerOffsetSum[i] +=mp->mwdn[i];
+			mp = mp->next;
+		}
+
+		if(maxPowerOffsetSum[i]<wloadOffset[i]||
+				-minPowerOffsetSum[i]>wloadOffset[i])
+		{
+			printf("\n####在%s平衡机组调节能力不足，负荷差：%lf,调节能力上可调：%lf，下可调：%lf",
+					sd2sj[i-1].c_str(),wloadOffset[i],maxPowerOffsetSum[i],minPowerOffsetSum[i]);
+			exit(1);
+		}
+		mp = balanceMicData;
+		while(NULL!=mp)
+		{
+			if(wloadOffset[i]>SMLL)
+				mp->mw[i] += wloadOffset[i]*mp->mwup[i]/maxPowerOffsetSum[i];
+			else
+				mp->mw[i] += wloadOffset[i]*mp->mwdn[i]/minPowerOffsetSum[i];
+			mp = mp->next;
+		}
+	}
+}
+
+
+void initBalanceGen()
+{
+	double wloadSeched[100];
+	memset(wloadSeched,0,sizeof(double)*100);
+	struct micstr *mp = balanceMicData;
+	while(NULL!=mp)
+	{
+		double avg = (mp->mwmax+mp->mwmin)*(g_balanceInitPowerRatio);
+		for(int i=sd1;i<=sdnum;i++)
+		{
+			mp->mw[i] = avg;
+			mp->mwdn[i] = avg-mp->mwmin;
+			mp->mwup[i] = mp->mwmax-avg;
+			wloadSeched[i] += avg;
+		}
+		mp = mp->next;
+	}
+
+	for(int i=sd1;i<=sdnum;i++)
+	{
+		wload0[i]-=wloadSeched[i];
+		wload[i]-=wloadSeched[i];
+	}
+}
+
+
+void filter(const double *v0,double *v,long n,struct micstr*mp)
+{
+
 	for(long i=1;i<=n;i++)
 	{
 		double vi=v0[i];
 		long pos = 0;
 		for(pos=i+1;pos<=n;pos++)
-			if(fabs(v0[pos]-vi)>tol) break;
+			if(fabs(v0[pos]-vi)>mp->mwmax*g_tol) break;
 
-		long i2=min(i+MAX_SD2,pos)-1;
+		long i2=min(i+g_maxsdSpan,pos)-1;
 		for(pos=i;pos<=i2;pos++)
 			v[pos]=avgfun(v0,i,i2);
 		i=i2;
@@ -216,6 +351,16 @@ double micSched(double *mw,double *wload,long sd)
 				sd,sd2sj[sd-1].c_str(),wload[sd],minSched[0]);
 		exit(212);
 	}
+	if(wload[sd]>maxSched[0])
+	{
+		printf("\nError --- %ld",__LINE__);
+		printf("\n wload   =%lf, sd=%ld",wload[sd],sd);
+		printf("\n minSched=%lf",minSched[0]);
+		printf("\n");
+		printf("####在时段%d，时间：%s处不满足所有机组最大出力约束条件，修正后空间：%f,机组最大出力：%f",
+				sd,sd2sj[sd-1].c_str(),wload[sd],maxSched[0]);
+		exit(212);
+	}
 	////////////////////////////////////////////////////////////
 
 	double mic=micmn;//init
@@ -276,11 +421,11 @@ void bid_sched()
 	struct micstr *mp=micData;
 	while(mp!=NULL)
 	{
-//		double mw0[100];
-//		memcpy(mw0,mp->mw,100*sizeof(double));
-//
-//
-//		filter(mw0,mp->mw,sdnum,TOL);
+		double mw0[100];
+		memcpy(mw0,mp->mw,100*sizeof(double));
+
+
+		filter(mw0,mp->mw,sdnum,mp);
 		mp->mwh=mwhfun(mp->mw,sdnum);
 		mp=mp->next;
 	}

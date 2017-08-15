@@ -4,6 +4,7 @@
 #include"psched.h"
 #include"math.h"
 #include<iostream>
+#include<sstream>
 using namespace::std;
 //globals
 int g_maxsdSpan;
@@ -46,6 +47,8 @@ double wload0     [100];//system loads
 double wload      [100];
 double micPrice   [100];
 double mwStep;
+char warningMsg[10000]={0};
+char warningMsg1[10000]={0};
 string sd2sj[]={"00:15","00:30","00:45",
 		"01:00","01:15","01:30","01:45",
 		"02:00","02:15","02:30","02:45",
@@ -147,6 +150,7 @@ void compensateLoad()
 		wloadOffset[i] = wload0[i]-sechedWload[i];
 	}
 
+	stringstream ss;
 	for( int i=sd1;i<=sdnum;i++)
 	{
 		struct micstr * mp = balanceMicData;
@@ -161,20 +165,32 @@ void compensateLoad()
 		if(maxPowerOffsetSum[i]<wloadOffset[i]||
 				-minPowerOffsetSum[i]>wloadOffset[i])
 		{
-			printf("\n####在%s平衡机组调节能力不足，负荷差：%lf,调节能力上可调：%lf，下可调：%lf",
-					sd2sj[i-1].c_str(),wloadOffset[i],maxPowerOffsetSum[i],minPowerOffsetSum[i]);
-			exit(1);
+			if(wloadOffset[i]>SMLL)
+				sprintf(warningMsg1,"%s\n####在%s处负荷差额:%-8.2lf,上可调:%-8.2lf，仍存在差额:%-8.2lf",warningMsg1,sd2sj[i-1].c_str(),
+						wloadOffset[i],maxPowerOffsetSum[i],wloadOffset[i]-maxPowerOffsetSum[i]);
+			else
+				sprintf(warningMsg1,"%s\n####在%s处负荷差额:%-8.2lf,上可调:%-8.2lf，仍存在差额:%-8.2lf",warningMsg1,sd2sj[i-1].c_str(),
+						wloadOffset[i],minPowerOffsetSum[i],wloadOffset[i]+minPowerOffsetSum[i]);
 		}
 		mp = balanceMicData;
 		while(NULL!=mp)
 		{
-			if(wloadOffset[i]>SMLL)
+			if(wloadOffset[i]>SMLL){
 				mp->mw[i] += wloadOffset[i]*mp->mwup[i]/maxPowerOffsetSum[i];
-			else
-				mp->mw[i] += wloadOffset[i]*mp->mwdn[i]/minPowerOffsetSum[i];
+				mp->mw[i] = mp->mw[i]>mp->mwmax?mp->mwmax:mp->mw[i];
+			}
+			else{
+				mp->mw[i] += wloadOffset[i]*mp->mwdn[i]/minPowerOffsetSum[i];//wloadOffset[i]<SML
+				mp->mw[i] = mp->mw[i]<mp->mwmin?mp->mwmin:mp->mw[i];
+			}
+
 			mp = mp->next;
 		}
 	}
+
+
+	if(warningMsg1[0]!=0)
+		sprintf(warningMsg,"####%s%s","平衡机调节能力不足",warningMsg1);
 }
 
 
@@ -423,7 +439,6 @@ void bid_sched()
 	{
 		double mw0[100];
 		memcpy(mw0,mp->mw,100*sizeof(double));
-
 
 		filter(mw0,mp->mw,sdnum,mp);
 		mp->mwh=mwhfun(mp->mw,sdnum);

@@ -20,6 +20,7 @@ string logPathStr;
 CDmDb *dmdb;
 double fhycxzGloble[SDNUM+1];//负荷预测修正
 double llxjhGloble[SDNUM+1];//联络线计划
+double xnytfqeGloble[SDNUM+1];
 double xnyycGloble[SDNUM+1];//新能源预测
 double sdjhGloble[SDNUM+1];//水调计划
 double ddljhGlobel[SDNUM+1];//定电量输入负荷
@@ -106,9 +107,9 @@ void readFhl(string strDate)
 		double valDouble = atof(valStr.c_str());
 		fhycxzGloble[sdInt]= valDouble;
 	}
-
-	string llxjhSql="select sd,sz from HLJJHDB.HLJJHDB.LLXJH \
-			where rq='"+strDate+"' order by sd";
+	///////////////////////////////////////////////////////////////////////
+	string llxjhSql="select sd,sz from HLJJHDB.HLJJHDB.LLXJH "
+			"where rq='"+strDate+"' order by sd";
 
 	retRedNum = dmdb->exec_select(llxjhSql.c_str(), 2, "读取联络线计划数据");
 	if(retRedNum!=SDNUM){
@@ -123,8 +124,25 @@ void readFhl(string strDate)
 		double valDouble = atof(valStr.c_str());
 		llxjhGloble[sdInt]= valDouble;
 	}
+	////////////////////////////////////////////////////////////////////////
+	string xnytfqeSql = "SELECT SD, SZ FROM HLJJHDB.HLJJHDB.XNYTFQE "
+			"WHERE RQ='"+strDate+"'";
+	retRedNum = dmdb->exec_select(xnytfqeSql.c_str(), 2, "读取新能源调峰缺额数据");
+	if(retRedNum==SDNUM||retRedNum==0){
+		for(int i=0;i<retRedNum;i++)
+		{
+			string sdStr = dmdb->get_select_data(i,0).c_str();
+			int sdInt = atoi(sdStr.c_str());
+			string valStr = dmdb->get_select_data(i,1);
+			double valDouble = atof(valStr.c_str());
+			xnytfqeGloble[sdInt]= valDouble;
+		}
+	}else{
+		cout<<"####新能源调峰缺额数据有问题"<<endl;
+		exit(-201);//联络线计划数据有问题
+	}
 
-
+	///////////////////////////////////////////////////////////////////////
 	string xnyycSql = "select sd,sum(sz) from HLJJHDB.HLJJHDB.XNYYC \
 			where rq='"+strDate+"' group by sd order by sd";
 
@@ -200,7 +218,7 @@ void readFhl(string strDate)
 
 
 	for(int i=1;i<=SDNUM;i++){
-		bidFhInput[i] =fhycxzGloble[i]+llxjhGloble[i]-xnyycGloble[i]-sdjhGloble[i]-ddljhGlobel[i]-dqxjhGlobel[i];
+		bidFhInput[i] =fhycxzGloble[i]+llxjhGloble[i]+xnytfqeGloble[i]-xnyycGloble[i]-sdjhGloble[i]-ddljhGlobel[i]-dqxjhGlobel[i];
 		wload0[i]=bidFhInput[i];
 		wload [i]=bidFhInput[i];
 	}
@@ -382,15 +400,18 @@ void readGlxz(string strDate)
 void readBalanceGen(string strDate)
 {
 	vector<vector<string> >balanceGenId;
-	string phjMaxRqSql = "SELECT MAX(RQ) FROM HLJJHDB.HLJJHDB.PHJ WHERE RQ<='"+strDate+"'";
-	dmdb->exec_select(phjMaxRqSql.c_str(),1,"balance gen max date");
-	string phjMaxDateStr = dmdb->get_select_data(0,0);
+	string phjMaxRqSql = "SELECT NVL(MAX(RQ),0) FROM HLJJHDB.HLJJHDB.PHJ WHERE RQ<='"+strDate+"'";
+	long rowNum = dmdb->exec_select(phjMaxRqSql.c_str(),1,"balance gen max date");
+	string phjMaxDateStr=dmdb->get_select_data(0,0);
+	if(phjMaxDateStr.compare("0")==0)
+		phjMaxDateStr.assign(strDate);
+	cout<<phjMaxDateStr<<endl;
 	string glxzMaxRqSql = "SELECT MAX(RQ) FROM HLJJHDB.HLJJHDB.GLXZ WHERE RQ<='"+strDate+"'";
 	dmdb->exec_select(glxzMaxRqSql.c_str(),1,"power limit max date");
 	string glxzMaxDateStr = dmdb->get_select_data(0,0);
 	string balanceSql = "SELECT PHJ.SID,GLXZ.SNAME,GLXZ.GLSX,GLXZ.GLXX FROM HLJJHDB.HLJJHDB.PHJ PHJ,HLJJHDB.HLJJHDB.GLXZ GLXZ "
 			"WHERE PHJ.SID=GLXZ.SID AND PHJ.RQ='"+phjMaxDateStr+"' AND GLXZ.RQ='"+glxzMaxDateStr+"'";
-	long rowNum = dmdb->exec_select(balanceSql.c_str(),4,"balance gen select");
+	rowNum = dmdb->exec_select(balanceSql.c_str(),4,"balance gen select");
 
 	for(int i=0;i<rowNum;i++)
 	{
@@ -481,8 +502,8 @@ void writeToDb(string strDate)
 		{
 			sprintf(insertSqlStr,"INSERT INTO HLJJHDB.HLJJHDB.RJZJH288(RQ,SJ,SD,SID,SNAME,SX,XX,SKT,XKT,GL) VALUES( "
 					"'%s','%s','%d','%s','%s','%f','%f','%f','%f','%f')",	strDate.c_str(),sd2sj288[i-1].c_str(),i,mp->id,
-					mp->descr,mp->mwmax,mp->mwmin,mp->mwmax-mw288[i-1],
-					mw288[i-1]-mp->mwmin,mw288[i-1]);
+					mp->descr,mp->mwmax,mp->mwmin,mp->mwmax-mw288[i],
+					mw288[i]-mp->mwmin,mw288[i]);
 			printf(insertSqlStr);
 			int ret = dmdb->exec_sql(insertSqlStr);
 			if(ret!=0)
@@ -520,8 +541,8 @@ void writeToDb(string strDate)
 		{
 			sprintf(insertSqlStr,"INSERT INTO HLJJHDB.HLJJHDB.RJZJH288(RQ,SJ,SD,SID,SNAME,SX,XX,SKT,XKT,GL) VALUES( "
 					"'%s','%s','%d','%s','%s','%f','%f','%f','%f','%f')",	strDate.c_str(),sd2sj288[i-1].c_str(),i,mp->id,
-					mp->descr,mp->mwmax,mp->mwmin,mp->mwmax-mw288[i-1],
-					mw288[i-1]-mp->mwmin,mw288[i-1]);
+					mp->descr,mp->mwmax,mp->mwmin,mp->mwmax-mw288[i],
+					mw288[i]-mp->mwmin,mw288[i]);
 			printf(insertSqlStr);
 			int ret = dmdb->exec_sql(insertSqlStr);
 			if(ret!=0)
@@ -721,8 +742,10 @@ int main(long argc,char **argv)
 	bid_report  ();
 	////////////////////////////////////////////////////////////
 	delete(dmdb);
-	printf("\n\n");
-	printf("####算法完成\n");
+	if(warningMsg[0]!=0)
+		printf("%s\n%s",warningMsg,"算法完成\n");
+	else
+		printf("####算法完成\n");
 	return 0;
 }
 //end of file

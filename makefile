@@ -4,6 +4,8 @@ lin:= -L /opt/dmdbms/bin -ldmapi
 object_bid=sched_bid.o psched.o common.o dmdb.o operate_config.o
 object_dingdianliang = sched_mwh.o  psched.o common.o dmdb.o operate_config.o
 all:bid_sched dingdianliang
+test:test.cpp
+	g++ -o test test.cpp
 dingdianliang:$(object_dingdianliang)
 	g++ -o dingdianliang $(object_dingdianliang) $(compileFlag) $(lin)
 bid_sched:$(object_bid)

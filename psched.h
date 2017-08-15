@@ -170,6 +170,8 @@ extern double wload0     [100];//system loads
 extern double wload      [100];
 extern double micPrice   [100];
 extern double mwStep;
+extern char warningMsg[10000];
+extern char warningMsg1[10000];
 ////////////////////////////////////////////////////////////
 
 #endif

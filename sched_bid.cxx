@@ -70,7 +70,7 @@ void readAlgorithmPara()
 	if(paraMap.size()<paraSize)
 	{
 		cout<<"####数据库中算法参数数量小于需求"<<endl;
-		exit(211);
+		exit(NO_ENOUGH_PARA_IN_DATABASE);
 	}
 	mwStep=atof(paraMap["BID_mwStep"].c_str());
 	pntNum=atoi(paraMap["BID_pntNum"].c_str());
@@ -96,7 +96,7 @@ void readFhl(string strDate)
 	retRedNum = dmdb->exec_select(fhycxzSql.c_str(), 2, "读取负荷预测修正数据");
 	if(retRedNum!=SDNUM){
 		cout<<"####负荷预测数据有问题"<<endl;
-		exit(-200);//负荷预测数据有问题
+		exit(LOAD_FORCAST_DATA_ERROR);//负荷预测数据有问题
 	}
 	printf("id              name\n");
 	for(int i=0;i<retRedNum;i++)
@@ -114,7 +114,7 @@ void readFhl(string strDate)
 	retRedNum = dmdb->exec_select(llxjhSql.c_str(), 2, "读取联络线计划数据");
 	if(retRedNum!=SDNUM){
 		cout<<"####联络线计划数据有问题"<<endl;
-		exit(-201);//联络线计划数据有问题
+		exit(INTERCONECTION_DATA_ERROR);//联络线计划数据有问题
 	}
 	for(int i=0;i<retRedNum;i++)
 	{
@@ -139,7 +139,7 @@ void readFhl(string strDate)
 		}
 	}else{
 		cout<<"####新能源调峰缺额数据有问题"<<endl;
-		exit(-201);//联络线计划数据有问题
+		exit(NEW_ENERGY_SCHED_VACANCY);//新能源调峰缺额数据有问题
 	}
 
 	///////////////////////////////////////////////////////////////////////
@@ -159,7 +159,7 @@ void readFhl(string strDate)
 		}
 	}else{
 		cout<<"####新能源预测数据有问题"<<endl;
-		exit(-202);//新能源预测数据有问题
+		exit(NEW_ENERGY_DATA_ERROR);//新能源预测数据有问题
 	}
 
 	string sdjhSql = "select sd,sum(sz) from HLJJHDB.HLJJHDB.SDJH \
@@ -177,7 +177,7 @@ void readFhl(string strDate)
 		}
 	}else{
 		cout<<"####水调计划数据有问题"<<endl;
-		exit(-203);//新能源预测数据有问题
+		exit(WATER_SCHED_DATA);//新能源预测数据有问题
 	}
 
 	string ddljhSql = "SELECT SD,SUM(GL) FROM HLJJHDB.HLJJHDB.DDLJH "
@@ -195,7 +195,7 @@ void readFhl(string strDate)
 		}
 	}else{
 		cout<<"####定电量发电计划数据有问题"<<endl;
-		exit(-204);//新能源预测数据有问题
+		exit(FIXED_ENERGY_DATA_ERROR);//新能源预测数据有问题
 	}
 
 	string dqxjhSql = "SELECT SD,SUM(GL) FROM HLJJHDB.HLJJHDB.DQXJH "
@@ -213,7 +213,7 @@ void readFhl(string strDate)
 		}
 	}else{
 		cout<<"####定曲线发电计划数据有问题"<<endl;
-		exit(-205);//新能源预测数据有问题
+		exit(FIXED_CURVE_DATA_ERROR);//新能源预测数据有问题
 	}
 
 
@@ -236,7 +236,7 @@ void readQzxs(string strDate)
 	retRedNum = dmdb->exec_select(maxRqInQzxs.c_str(), 1, "读取权重系数最大日期");
 	if(retRedNum<=0){
 		cout<<"####权重系数日期有问题"<<endl;
-		exit(-206);
+		exit(QZXS_DATE_ERROR);
 	}
 	string maxRq = dmdb->get_select_data(0,0);
 	//取出定曲线和平衡机组
@@ -249,7 +249,7 @@ void readQzxs(string strDate)
 	retRedNum = dmdb->exec_select(jzRddlSql.c_str(), 3, "读取权重系数");
 	if(retRedNum<=0){
 		cout<<"####权重系数有问题"<<endl;
-		exit(-207);
+		exit(QZXS_DATA_ERROR);
 	}
 
 	micData=NULL;
@@ -300,6 +300,18 @@ void setBid()
 		}
 		mp = mp->next;
 	}
+
+	mp = balanceMicData;
+	for(int i=0;i<balanceNum;i++)
+	{
+		double everyStep = mp->mwmin/rampSd;
+		for(int j=1;j<=rampSd;j++)
+		{
+			mp->rampdn[j] = mp->mwmin-everyStep*(j-1);
+			mp->rampup[j] = everyStep*j;
+		}
+		mp = mp->next;
+	}
 }
 
 /**
@@ -314,11 +326,21 @@ void readKtj(string strDate)
 			"where substr(qssj,0,10)<='"+strDate+"' and substr(zzsj,0,10)>='"+strDate+"'";
 	retRedNum = dmdb->exec_select(ktjSql.c_str(), 4, "读取停机信息");
 
-	//默认设置所有机组开机
+	//default:all gen is power on
 	struct micstr *mp = micData;
 	for(int i=0;i<micNum;i++)
 	{
 		for(int j=1;j<=SDNUM;j++)
+		{
+			mp->stat[j] = 1;
+		}
+		mp = mp->next;
+	}
+	//balance gens
+	mp = balanceMicData;
+	for(int i=0;i<balanceNum;i++)
+	{
+		for(int j=0;j<=SDNUM;j++)
 		{
 			mp->stat[j] = 1;
 		}
@@ -337,6 +359,23 @@ void readKtj(string strDate)
 		{
 			if(strcmp(sidStr.c_str(),mp->id)==0)
 			{
+				convertAndSetKtj(qssjStr,zzsjStr,strDate,mp->stat,SDNUM);
+				cout<<"id:"<<mp->id<<",name:"<<mp->descr<<": ";
+				for(int i=1;i<=SDNUM;i++)
+				{
+					cout<<mp->stat[i]<<" ";
+				}
+				cout<<"endl"<<endl;
+				break;
+			}
+			mp = mp->next;
+		}
+
+		mp = balanceMicData;
+		for(int j=0;j<balanceNum;j++)
+		{
+			if(strcmp(sidStr.c_str(),mp->id)==0)
+			{
 
 				convertAndSetKtj(qssjStr,zzsjStr,strDate,mp->stat,SDNUM);
 				cout<<"id:"<<mp->id<<",name:"<<mp->descr<<": ";
@@ -345,6 +384,7 @@ void readKtj(string strDate)
 					cout<<mp->stat[i]<<" ";
 				}
 				cout<<"endl"<<endl;
+				break;
 			}
 			mp = mp->next;
 		}
@@ -372,7 +412,7 @@ void readGlxz(string strDate)
 	retRedNum = dmdb->exec_select(glxzSql.c_str(), 4, "读取功率限值");
 	if(retRedNum<=0){
 		cout<<"####功率限值有问题"<<endl;
-		exit(-209);
+		exit(GLXZ_DATA_ERROR);
 	}
 
 
@@ -438,7 +478,7 @@ void readBalanceGen(string strDate)
 	}
 	reverse(balanceMicData);
 
-	initBalanceGen();//sub balance init power
+
 }
 /**
  * 读取算法所需数据，并填写全局变量
@@ -450,9 +490,11 @@ void readAllDataFromDb(string strDate)
 	readFhl(strDate);
 	readQzxs(strDate);
 	readGlxz(strDate);
+
+	readBalanceGen(strDate);
 	setBid();
 	readKtj(strDate);
-	readBalanceGen(strDate);
+	initBalanceGen();//sub balance init power
 
 }
 
@@ -491,7 +533,7 @@ void writeToDb(string strDate)
 			int ret = dmdb->exec_sql(insertSqlStr);
 			if(ret!=0)
 			{
-				cout<<"插入数据出错，错误代码："<<ret<<endl;
+				cout<<"####插入一般机组96点计划数据出错，错误代码："<<ret<<endl;
 				exit(106);
 			}else
 				numInsert96++;
@@ -508,7 +550,7 @@ void writeToDb(string strDate)
 			int ret = dmdb->exec_sql(insertSqlStr);
 			if(ret!=0)
 			{
-				cout<<"插入数据出错，错误代码："<<ret<<endl;
+				cout<<"####插入一般机组288点计划数据出错，错误代码："<<ret<<endl;
 				exit(106);
 			}else
 				numInsert288++;
@@ -529,7 +571,7 @@ void writeToDb(string strDate)
 			int ret = dmdb->exec_sql(insertSqlStr);
 			if(ret!=0)
 			{
-				cout<<"插入数据出错，错误代码："<<ret<<endl;
+				cout<<"####插入平衡机组96数据出错，错误代码："<<ret<<endl;
 				exit(106);
 			}else
 				numInsert96++;
@@ -547,7 +589,7 @@ void writeToDb(string strDate)
 			int ret = dmdb->exec_sql(insertSqlStr);
 			if(ret!=0)
 			{
-				cout<<"插入数据出错，错误代码："<<ret<<endl;
+				cout<<"####插入平衡机组288数据出错，错误代码："<<ret<<endl;
 				exit(106);
 			}else
 				numInsert288++;
@@ -614,12 +656,13 @@ void convertAndSetKtj(string startDateTime,string endDateTime,string strDate,lon
  */
 void printAllDate()
 {
+	cout<<endl;
 	cout<<"fhycxzGloble:";
 	for(int i=1;i<SDNUM;i++)
 	{
 		cout<<i<<":"<<fhycxzGloble[i]<<",";
 	}
-
+	cout<<endl;
 	cout<<"llxjhGloble:";
 	for(int i=1;i<SDNUM;i++)
 	{
@@ -632,6 +675,12 @@ void printAllDate()
 		cout<<i<<":"<<xnyycGloble[i]<<",";
 	}
 	cout<<endl;
+	cout<<"xnytfqeGloble:";
+	for(int i=1;i<SDNUM;i++)
+	{
+		cout<<i<<":"<<xnytfqeGloble[i]<<",";
+	}
+	cout<<endl;
 	cout<<"sdjhGloble:";
 	for(int i=1;i<SDNUM;i++)
 	{
@@ -639,10 +688,16 @@ void printAllDate()
 	}
 	cout<<endl;
 
-	cout<<"sdjhGloble:";
+	cout<<"ddljhGlobel:";
 	for(int i=1;i<SDNUM;i++)
 	{
-		cout<<i<<":"<<sdjhGloble[i]<<",";
+		cout<<i<<":"<<ddljhGlobel[i]<<",";
+	}
+	cout<<endl;
+	cout<<"dqxjhGlobel:";
+	for(int i=1;i<SDNUM;i++)
+	{
+		cout<<i<<":"<<dqxjhGlobel[i]<<",";
 	}
 	cout<<endl;
 	cout<<"zuizhong:";
@@ -654,6 +709,8 @@ void printAllDate()
 	cout<<endl;
 	struct micstr *mp = micData;
 	double clxx = 0;
+	double summin = 0;
+	int genNum = 0;
 	while(mp!=NULL)
 	{
 		cout<<mp->id<<endl;
@@ -685,9 +742,17 @@ void printAllDate()
 		cout<<endl;
 		cout<<endl;
 		cout<<endl;
-
+		if(mp->stat[1]!=0)
+		{
+			summin+=mp->mwmin;
+			genNum++;
+		}
 		mp = mp->next;
 	}
+
+	cout<<endl<<"机组最小出力"<<summin<<endl;
+	cout<<endl<<"机组计划台数"<<micNum<<endl;
+	cout<<endl<<"时段1开机机组计划台数"<<genNum<<endl;
 	mp = micData;
 	while(mp!=NULL)
 	{
@@ -734,12 +799,12 @@ int main(long argc,char **argv)
 	readAllDataFromDb(strDate);
 
 	printAllDate();
-//	bid_readdat ();
-	bid_dataprep();
+	//bid_readdat ();
+	//bid_dataprep();
 	bid_sched   ();
 	compensateLoad();
 	writeToDb(strDate.c_str());
-	bid_report  ();
+	//bid_report  ();
 	////////////////////////////////////////////////////////////
 	delete(dmdb);
 	if(warningMsg[0]!=0)

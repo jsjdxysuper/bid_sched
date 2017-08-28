@@ -176,12 +176,23 @@ void compensateLoad()
 		while(NULL!=mp)
 		{
 			if(wloadOffset[i]>SMLL){
-				mp->mw[i] += wloadOffset[i]*mp->mwup[i]/maxPowerOffsetSum[i];
-				mp->mw[i] = mp->mw[i]>mp->mwmax?mp->mwmax:mp->mw[i];
+				if(maxPowerOffsetSum[i]<SMLL||mp->stat[i]==0||
+						isrampDn(mp->stat,i)||isrampUp(mp->stat,i))
+					;
+				else{
+					mp->mw[i] += wloadOffset[i]*mp->mwup[i]/maxPowerOffsetSum[i];
+					mp->mw[i] = mp->mw[i]>mp->mwmax&&mp->mw[i]>SMLL?mp->mwmax:mp->mw[i];
+				}
 			}
 			else{
-				mp->mw[i] += wloadOffset[i]*mp->mwdn[i]/minPowerOffsetSum[i];//wloadOffset[i]<SML
-				mp->mw[i] = mp->mw[i]<mp->mwmin?mp->mwmin:mp->mw[i];
+				if(minPowerOffsetSum[i]<SMLL||mp->stat[i]==0||
+						isrampDn(mp->stat,i)||isrampUp(mp->stat,i))
+					;
+				else
+				{
+					mp->mw[i] += wloadOffset[i]*mp->mwdn[i]/minPowerOffsetSum[i];//wloadOffset[i]<SML
+					mp->mw[i] = (mp->mw[i]<mp->mwmin)?mp->mwmin:mp->mw[i];
+				}
 			}
 
 			mp = mp->next;
@@ -198,16 +209,26 @@ void initBalanceGen()
 {
 	double wloadSeched[100];
 	memset(wloadSeched,0,sizeof(double)*100);
+
+	rampSched(balanceMicData);
 	struct micstr *mp = balanceMicData;
 	while(NULL!=mp)
 	{
-		double avg = (mp->mwmax+mp->mwmin)*(g_balanceInitPowerRatio);
+		//memset(mp->mw,0,sizeof(double)*100);
+		double avg = mp->mwmin+(mp->mwmax-mp->mwmin)*(g_balanceInitPowerRatio);
 		for(int i=sd1;i<=sdnum;i++)
 		{
-			mp->mw[i] = avg;
-			mp->mwdn[i] = avg-mp->mwmin;
-			mp->mwup[i] = mp->mwmax-avg;
-			wloadSeched[i] += avg;
+			if(isrampUp(mp->stat,i)||isrampDn(mp->stat,i)||mp->stat[i]==0)
+			{
+				mp->mwdn[i] = 0;
+				mp->mwup[i] = 0;
+				wloadSeched[i] += mp->mw[i];
+			}else{
+				mp->mw[i] = avg;
+				mp->mwdn[i] = avg-mp->mwmin;
+				mp->mwup[i] = mp->mwmax-avg;
+				wloadSeched[i] += avg;
+			}
 		}
 		mp = mp->next;
 	}
@@ -417,7 +438,7 @@ void printWm()
 }
 void bid_sched()
 {
-	rampSched();
+	rampSched(micData);
 	printWm();
 
 	for(long sd=sd1;sd<=sdnum;sd++)
@@ -686,9 +707,9 @@ void rampFlag_fun(struct micstr *micData,long sd)
 /**
  * put run->stop curve,stop->run curve inject into mp->mw[]
  */
-void rampSched()
+void rampSched(struct micstr * micmic)
 {
-	struct micstr *mp=micData;
+	struct micstr *mp=micmic;
 	while(mp!=NULL)
 	{
 		for(long i=1;i<sdnum;i++)
@@ -707,7 +728,6 @@ void rampSched()
 		}	mp=mp->next;
 	}
 	////////////////////////////////////////////////////////////
-
 	return;
 }
 

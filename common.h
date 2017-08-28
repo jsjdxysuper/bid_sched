@@ -264,7 +264,9 @@ double sumrow(double **a,long i,long n,double *v);
 double sumrow(double **a,long i,long j0,long n);
 double sumrow(struct fspar *s,long i,double *v);
 ////////////////////////////////////////////////////////////
-
+/**
+ * return link length
+ */
 template<class TYPE>
 long chainlen(TYPE *chain)
 {
@@ -313,6 +315,9 @@ long posmaxdv(double *v,long n);
 long posmax(double *v,long n);
 long posmax(double *v,long i0,long n);
 ////////////////////////////////////////////////////////////
+/**
+ * find min value, return index
+ */
 template<class TYPE>
 long posmin(TYPE *v,long i0,long n)
 {
@@ -332,7 +337,9 @@ long posmin(TYPE *v,long n)
 }
 
 
-
+/**
+ * find node in chain,return index
+ */
 template <class TYPE>
 long posnode(TYPE *node,TYPE *chain)
 {
@@ -364,7 +371,9 @@ long timediff(char *time_str,char *time0);
 long timefun(char *time_str);
 long wdayfun(char *date_str);
 ////////////////////////////////////////////////////////////
-
+/**
+ * add node at end of chain
+ */
 template<class TYPE>
 void addnode(TYPE *node,TYPE *&chain)
 {

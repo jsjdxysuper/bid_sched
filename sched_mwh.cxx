@@ -127,7 +127,7 @@ void readFhyc(string strDate)
 		}
 	}else{
 		cout<<"####新能源预测数据有问题"<<endl;
-		exit(-NEW_ENERGY_DATA_ERRO);//新能源预测数据有问题
+		exit(NEW_ENERGY_DATA_ERROR);//新能源预测数据有问题
 	}
 
 	string sdjhSql = "select sd,sum(sz) from HLJJHDB.HLJJHDB.SDJH \

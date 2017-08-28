@@ -23,8 +23,16 @@ extern double g_balanceInitPowerRatio;
 #define CONFIG_FILE_NOTFOUND -1100
 #define LOAD_FORCAST_DATA_ERROR -1101
 #define INTERCONECTION_DATA_ERROR -1102
-#define NEW_ENERGY_DATA_ERRO -1103
+#define NEW_ENERGY_DATA_ERROR -1103
 #define WATER_SCHED_DATA -1104
+#define NEW_ENERGY_SCHED_VACANCY -1105
+#define FIXED_ENERGY_DATA_ERROR -1106
+#define FIXED_CURVE_DATA_ERROR -1107
+#define QZXS_DATE_ERROR -1108
+#define QZXS_DATA_ERROR -1109
+#define GLXZ_DATA_ERROR -1110
+///////////////////////////////////////////////////////////
+#define NO_ENOUGH_PARA_IN_DATABASE -2100
 ///////////////////////////////////////////////////////////
 
 struct fixstr//fixed mwh
@@ -105,7 +113,7 @@ void maxSched_fun(double *maxSched,double *minSched,double mic,long sd);
 ////////////////////////////////////////////////////////////
 
 void rampFlag_fun(struct micstr *micData,long sd);
-void rampSched();
+void rampSched(struct micstr * micmic);
 void rampup_crv(double *mwmin,double *ramp,long sd1);
 void rampdn_crv(double *mwmin,double *ramp,long sd1);
 void rampup_fun(double *mwmin,long sdnum);

@@ -3,11 +3,11 @@
 #include"common.h"
 #include"psched.h"
 #include "dmdb.h"
-#include <iostream>
+
 #include<map>
 #include<vector>
 #include"operate_config.h"
-using namespace::std;
+
 //定义为时段数+1
 #define SDNUM 96
 #define SQLSTRLEN 2048
@@ -16,6 +16,7 @@ string userNameStr;
 string passwordStr;
 string ipStr;
 string logPathStr;
+extern string strDate;
 
 CDmDb *dmdb;
 double fhycxzGloble[SDNUM+1];//负荷预测修正
@@ -28,8 +29,24 @@ double dqxjhGlobel[SDNUM+1];//定曲线计划
 double bidFhInput[SDNUM+1];//竞价负荷输入
 const char Config[] = "db.ini";
 void convertAndSetKtj(string startDateTime,string endDateTime,string strDate,long ktj[],int ktjnum);
-////////////////////////////////////////////////////////////
 
+////////////////////////////////////////////////////////////
+/**
+ * 写入算法执行情况
+ */
+void writeAlgResult2DB(string msg,string detailMsg)
+{
+	char insertSqlStr[SQLSTRLEN];
+	char dateStr[20]={0},timeStr[20]={0};
+	getSysTime(timeStr);
+	getSysDateNoLine(dateStr);
+
+	sprintf(insertSqlStr,"insert into  HLJJHDB.HLJJHDB.BZJG(FAH,SJ,BZMS,FPFS,JSJG,XXXX) "
+			"	values('%s%s%s','%s','三公调度','平均分配','%s','%s')",
+			strDate.substr(0,4).c_str(),strDate.substr(5,2).c_str(),strDate.substr(8,2).c_str(),timeStr,msg.c_str(),detailMsg.c_str());
+	printf(insertSqlStr);
+	int ret = dmdb->exec_sql(insertSqlStr);
+}
 /**
  * 读取数据库配置
  */
@@ -70,6 +87,7 @@ void readAlgorithmPara()
 	if(paraMap.size()<paraSize)
 	{
 		cout<<"####数据库中算法参数数量小于需求"<<endl;
+		writeAlgResult2DB("数据库中算法参数数量小于需求","");
 		exit(NO_ENOUGH_PARA_IN_DATABASE);
 	}
 	mwStep=atof(paraMap["BID_mwStep"].c_str());
@@ -95,7 +113,8 @@ void readFhl(string strDate)
 	long retRedNum = -1;
 	retRedNum = dmdb->exec_select(fhycxzSql.c_str(), 2, "读取负荷预测修正数据");
 	if(retRedNum!=SDNUM){
-		cout<<"####负荷预测数据有问题"<<endl;
+		cout<<"####负荷预测数据错误"<<endl;
+		writeAlgResult2DB("负荷预测数据错误","");
 		exit(LOAD_FORCAST_DATA_ERROR);//负荷预测数据有问题
 	}
 	printf("id              name\n");
@@ -108,12 +127,13 @@ void readFhl(string strDate)
 		fhycxzGloble[sdInt]= valDouble;
 	}
 	///////////////////////////////////////////////////////////////////////
-	string llxjhSql="select sd,sz from HLJJHDB.HLJJHDB.LLXJH "
+	string llxjhSql="select sd,sz from HLJJHDB.HLJJHDB.LLXJHXZ "
 			"where rq='"+strDate+"' order by sd";
 
 	retRedNum = dmdb->exec_select(llxjhSql.c_str(), 2, "读取联络线计划数据");
 	if(retRedNum!=SDNUM){
-		cout<<"####联络线计划数据有问题"<<endl;
+		cout<<"####联络线计划数据错误"<<endl;
+		writeAlgResult2DB("联络线计划数据错误","");
 		exit(INTERCONECTION_DATA_ERROR);//联络线计划数据有问题
 	}
 	for(int i=0;i<retRedNum;i++)
@@ -138,7 +158,8 @@ void readFhl(string strDate)
 			xnytfqeGloble[sdInt]= valDouble;
 		}
 	}else{
-		cout<<"####新能源调峰缺额数据有问题"<<endl;
+		cout<<"####新能源调峰缺额数据错误"<<endl;
+		writeAlgResult2DB("新能源调峰缺额数据错误","");
 		exit(NEW_ENERGY_SCHED_VACANCY);//新能源调峰缺额数据有问题
 	}
 
@@ -148,7 +169,7 @@ void readFhl(string strDate)
 
 
 	retRedNum = dmdb->exec_select(xnyycSql.c_str(), 2, "读取新能源预测数据");
-	if(retRedNum==SDNUM||retRedNum==0){
+//	if(retRedNum==SDNUM||retRedNum==0){
 		for(int i=0;i<retRedNum;i++)
 		{
 			string sdStr = dmdb->get_select_data(i,0).c_str();
@@ -157,16 +178,16 @@ void readFhl(string strDate)
 			double valDouble = atof(valStr.c_str());
 			xnyycGloble[sdInt]= valDouble;
 		}
-	}else{
-		cout<<"####新能源预测数据有问题"<<endl;
-		exit(NEW_ENERGY_DATA_ERROR);//新能源预测数据有问题
-	}
+//	}else{
+//		cout<<"####新能源预测数据有问题"<<endl;
+//		exit(NEW_ENERGY_DATA_ERROR);//新能源预测数据有问题
+//	}
 
 	string sdjhSql = "select sd,sum(sz) from HLJJHDB.HLJJHDB.SDJH \
               where rq='"+strDate+"' group by sd order by sd ";
 
 	retRedNum = dmdb->exec_select(sdjhSql.c_str(), 2, "测试");
-	if(retRedNum==SDNUM||retRedNum==0){
+//	if(retRedNum==SDNUM||retRedNum==0){
 		for(int i=0;i<retRedNum;i++)
 		{
 			string sdStr = dmdb->get_select_data(i,0).c_str();
@@ -175,10 +196,10 @@ void readFhl(string strDate)
 			double valDouble = atof(valStr.c_str());
 			sdjhGloble[sdInt]= valDouble;
 		}
-	}else{
-		cout<<"####水调计划数据有问题"<<endl;
-		exit(WATER_SCHED_DATA);//新能源预测数据有问题
-	}
+//	}else{
+//		cout<<"####水调计划数据有问题"<<endl;
+//		exit(WATER_SCHED_DATA);//新能源预测数据有问题
+//	}
 
 	string ddljhSql = "SELECT SD,SUM(GL) FROM HLJJHDB.HLJJHDB.DDLJH "
 			"WHERE RQ='"+strDate+"' GROUP BY SD";
@@ -194,7 +215,8 @@ void readFhl(string strDate)
 			ddljhGlobel[sdInt]= valDouble;
 		}
 	}else{
-		cout<<"####定电量发电计划数据有问题"<<endl;
+		cout<<"####定电量发电计划数据错误"<<endl;
+		writeAlgResult2DB("定电量发电计划数据错误","");
 		exit(FIXED_ENERGY_DATA_ERROR);//新能源预测数据有问题
 	}
 
@@ -212,7 +234,8 @@ void readFhl(string strDate)
 			dqxjhGlobel[sdInt]= valDouble;
 		}
 	}else{
-		cout<<"####定曲线发电计划数据有问题"<<endl;
+		cout<<"####定曲线发电计划数据错误"<<endl;
+		writeAlgResult2DB("定曲线发电计划数据错误","");
 		exit(FIXED_CURVE_DATA_ERROR);//新能源预测数据有问题
 	}
 
@@ -235,7 +258,8 @@ void readQzxs(string strDate)
 	string maxRqInQzxs = "select max(rq) from HLJJHDB.HLJJHDB.QZXS WHERE RQ<='"+strDate+"'";
 	retRedNum = dmdb->exec_select(maxRqInQzxs.c_str(), 1, "读取权重系数最大日期");
 	if(retRedNum<=0){
-		cout<<"####权重系数日期有问题"<<endl;
+		cout<<"####权重系数日期没有新值"<<endl;
+		writeAlgResult2DB("权重系数日期没有新值","");
 		exit(QZXS_DATE_ERROR);
 	}
 	string maxRq = dmdb->get_select_data(0,0);
@@ -248,7 +272,8 @@ void readQzxs(string strDate)
 						"WHERE RQ=(SELECT MAX(RQ) FROM HLJJHDB.HLJJHDB.PHJ WHERE RQ<='"+strDate+"'))";
 	retRedNum = dmdb->exec_select(jzRddlSql.c_str(), 3, "读取权重系数");
 	if(retRedNum<=0){
-		cout<<"####权重系数有问题"<<endl;
+		cout<<"####权重系数错误"<<endl;
+		writeAlgResult2DB("权重系数错误","");
 		exit(QZXS_DATA_ERROR);
 	}
 
@@ -401,7 +426,8 @@ void readGlxz(string strDate)
 	string maxRqInGlxz = "select max(rq) from HLJJHDB.HLJJHDB.GLXZ where rq<='"+strDate+"'";
 	retRedNum = dmdb->exec_select(maxRqInGlxz.c_str(), 1, "读取功率限值最大日期");
 	if(retRedNum<=0){
-		cout<<"####功率限值最大日期有问题"<<endl;
+		cout<<"####功率限值没有最新数据"<<endl;
+		writeAlgResult2DB("功率限值没有最新数据","");
 		exit(-208);
 	}
 	string maxRq = dmdb->get_select_data(0,0);
@@ -411,7 +437,8 @@ void readGlxz(string strDate)
 
 	retRedNum = dmdb->exec_select(glxzSql.c_str(), 4, "读取功率限值");
 	if(retRedNum<=0){
-		cout<<"####功率限值有问题"<<endl;
+		cout<<"####功率限值错误"<<endl;
+		writeAlgResult2DB("功率限值错误","");
 		exit(GLXZ_DATA_ERROR);
 	}
 
@@ -534,27 +561,28 @@ void writeToDb(string strDate)
 			if(ret!=0)
 			{
 				cout<<"####插入一般机组96点计划数据出错，错误代码："<<ret<<endl;
+				writeAlgResult2DB("数据库出错，插入一般机组96点计划数据出错，错误代码："+ret,"");
 				exit(106);
 			}else
 				numInsert96++;
 		}
-		memset(mw288,0,sizeof(double)*sdnum*3);
-		mpfun(mw288,mp->mw,sdnum);
-		for(int i=sd1;i<=sdnum*3;i++)
-		{
-			sprintf(insertSqlStr,"INSERT INTO HLJJHDB.HLJJHDB.RJZJH288(RQ,SJ,SD,SID,SNAME,SX,XX,SKT,XKT,GL) VALUES( "
-					"'%s','%s','%d','%s','%s','%f','%f','%f','%f','%f')",	strDate.c_str(),sd2sj288[i-1].c_str(),i,mp->id,
-					mp->descr,mp->mwmax,mp->mwmin,mp->mwmax-mw288[i],
-					mw288[i]-mp->mwmin,mw288[i]);
-			printf(insertSqlStr);
-			int ret = dmdb->exec_sql(insertSqlStr);
-			if(ret!=0)
-			{
-				cout<<"####插入一般机组288点计划数据出错，错误代码："<<ret<<endl;
-				exit(106);
-			}else
-				numInsert288++;
-		}
+//		memset(mw288,0,sizeof(double)*sdnum*3);
+//		mpfun(mw288,mp->mw,sdnum);
+//		for(int i=sd1;i<=sdnum*3;i++)
+//		{
+//			sprintf(insertSqlStr,"INSERT INTO HLJJHDB.HLJJHDB.RJZJH288(RQ,SJ,SD,SID,SNAME,SX,XX,SKT,XKT,GL) VALUES( "
+//					"'%s','%s','%d','%s','%s','%f','%f','%f','%f','%f')",	strDate.c_str(),sd2sj288[i-1].c_str(),i,mp->id,
+//					mp->descr,mp->mwmax,mp->mwmin,mp->mwmax-mw288[i],
+//					mw288[i]-mp->mwmin,mw288[i]);
+//			printf(insertSqlStr);
+//			int ret = dmdb->exec_sql(insertSqlStr);
+//			if(ret!=0)
+//			{
+//				cout<<"####插入一般机组288点计划数据出错，错误代码："<<ret<<endl;
+//				exit(106);
+//			}else
+//				numInsert288++;
+//		}
 		mp=mp->next;
 	}
 
@@ -572,33 +600,34 @@ void writeToDb(string strDate)
 			if(ret!=0)
 			{
 				cout<<"####插入平衡机组96数据出错，错误代码："<<ret<<endl;
+				writeAlgResult2DB("数据库出错，插入平衡机组96数据出错，错误代码："+ret,"");
 				exit(106);
 			}else
 				numInsert96++;
 		}
 
-		memset(mw288,0,sizeof(double)*sdnum*3);
-		mpfun(mw288,mp->mw,sdnum);
-		for(int i=sd1;i<=sdnum*3;i++)
-		{
-			sprintf(insertSqlStr,"INSERT INTO HLJJHDB.HLJJHDB.RJZJH288(RQ,SJ,SD,SID,SNAME,SX,XX,SKT,XKT,GL) VALUES( "
-					"'%s','%s','%d','%s','%s','%f','%f','%f','%f','%f')",	strDate.c_str(),sd2sj288[i-1].c_str(),i,mp->id,
-					mp->descr,mp->mwmax,mp->mwmin,mp->mwmax-mw288[i],
-					mw288[i]-mp->mwmin,mw288[i]);
-			printf(insertSqlStr);
-			int ret = dmdb->exec_sql(insertSqlStr);
-			if(ret!=0)
-			{
-				cout<<"####插入平衡机组288数据出错，错误代码："<<ret<<endl;
-				exit(106);
-			}else
-				numInsert288++;
-		}
+//		memset(mw288,0,sizeof(double)*sdnum*3);
+//		mpfun(mw288,mp->mw,sdnum);
+//		for(int i=sd1;i<=sdnum*3;i++)
+//		{
+//			sprintf(insertSqlStr,"INSERT INTO HLJJHDB.HLJJHDB.RJZJH288(RQ,SJ,SD,SID,SNAME,SX,XX,SKT,XKT,GL) VALUES( "
+//					"'%s','%s','%d','%s','%s','%f','%f','%f','%f','%f')",	strDate.c_str(),sd2sj288[i-1].c_str(),i,mp->id,
+//					mp->descr,mp->mwmax,mp->mwmin,mp->mwmax-mw288[i],
+//					mw288[i]-mp->mwmin,mw288[i]);
+//			printf(insertSqlStr);
+//			int ret = dmdb->exec_sql(insertSqlStr);
+//			if(ret!=0)
+//			{
+//				cout<<"####插入平衡机组288数据出错，错误代码："<<ret<<endl;
+//				exit(106);
+//			}else
+//				numInsert288++;
+//		}
 
 		mp = mp->next;
 	}
 	cout<<"96点计划插入"<<numInsert96<<"条数据"<<endl;
-	cout<<"288点计划插入"<<numInsert288<<"条数据"<<endl;
+//	cout<<"288点计划插入"<<numInsert288<<"条数据"<<endl;
 }
 
 
@@ -781,9 +810,28 @@ void printAllDate()
 		mp = mp->next;
 	}
 }
+int main1()
+{
+	char dateStr[20];
+	getSysTime(dateStr);
+	printf(dateStr);
+	return 0;
+}
+int main2(){
+	readConfig();
+	dmdb = new CDmDb(userNameStr.c_str(),passwordStr.c_str(),ipStr.c_str(),logPathStr.c_str());
+	int initRet = dmdb->init_database();
+		if(initRet!=0)
+		{
+			cout<<"####数据库链接失败"<<endl;
+			exit(99);
+		}
+		writeAlgResult2DB("计算完成","");
+		delete(dmdb);
+}
 int main(long argc,char **argv)
 {
-	string strDate = argv[1];
+	strDate = argv[1];
 
 	readConfig();
 	dmdb = new CDmDb(userNameStr.c_str(),passwordStr.c_str(),ipStr.c_str(),logPathStr.c_str());
@@ -791,7 +839,7 @@ int main(long argc,char **argv)
 	int initRet = dmdb->init_database();
 	if(initRet!=0)
 	{
-		cout<<"####数据库初始化失败"<<endl;
+		cout<<"####数据库链接失败"<<endl;
 		exit(99);
 	}
 
@@ -801,16 +849,22 @@ int main(long argc,char **argv)
 	printAllDate();
 	//bid_readdat ();
 	//bid_dataprep();
-	bid_sched   ();
+	bid_sched();
 	compensateLoad();
 	writeToDb(strDate.c_str());
+	if(warningMsg[0]!=0)
+	{
+		writeAlgResult2DB("计算完成",warningMsg);
+		printf("%s\n%s",warningMsg,"计算完成\n");
+	}
+	else{
+		writeAlgResult2DB("计算完成","");
+		printf("####计算完成\n");
+	}
 	//bid_report  ();
 	////////////////////////////////////////////////////////////
 	delete(dmdb);
-	if(warningMsg[0]!=0)
-		printf("%s\n%s",warningMsg,"算法完成\n");
-	else
-		printf("####算法完成\n");
+
 	return 0;
 }
 //end of file

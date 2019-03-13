@@ -7,6 +7,7 @@
 #include<map>
 #include <stdlib.h>
 #include"operate_config.h"
+#include"sched_bid.h"
 using namespace::std;
 //定义为时段数+1
 #define SDNUM 96
@@ -23,6 +24,22 @@ double xnyycGloble[SDNUM+1];//新能源预测
 double sdjhGloble[SDNUM+1];//水调计划
 double ddljhInputFl[SDNUM+1];//定电量输入负荷
 const char Config[] = "db.ini";
+/**
+ * 写入算法执行情况
+ */
+void writeAlgResult2DB(string msg,string detailMsg)
+{
+	char insertSqlStr[SQLSTRLEN];
+	char dateStr[20]={0},timeStr[20]={0};
+	getSysTime(timeStr);
+	getSysDateNoLine(dateStr);
+
+	sprintf(insertSqlStr,"insert into  HLJJHDB.HLJJHDB.BZJG(FAH,SJ,BZMS,FPFS,JSJG,XXXX) "
+			"	values('%s','%s','三公调度','平均分配','%s','%s')",
+			dateStr,timeStr,msg.c_str(),detailMsg.c_str());
+	printf(insertSqlStr);
+	int ret = dmdb->exec_sql(insertSqlStr);
+}
 /**
  * 读取数据库配置
  */
@@ -80,7 +97,8 @@ void readFhyc(string strDate)
 
 	retRedNum = dmdb->exec_select(fhycSql.c_str(), 2, "读取负荷预测数据");
 	if(retRedNum!=SDNUM){
-		cout<<"####负荷预测数据有问题"<<endl;
+		cout<<"####负荷预测数据错误"<<endl;
+		writeAlgResult2DB("负荷预测数据错误","");
 		exit(LOAD_FORCAST_DATA_ERROR);//负荷预测数据有问题
 	}
 	printf("id              name\n");
@@ -93,12 +111,13 @@ void readFhyc(string strDate)
 		fhycGloble[sdInt]= valDouble;
 	}
 
-	string llxjhSql="select sd,sz from HLJJHDB.HLJJHDB.LLXJH \
+	string llxjhSql="select sd,sz from HLJJHDB.HLJJHDB.LLXJHXZ \
 			where rq='"+strDate+"' order by sd";
 
 	retRedNum = dmdb->exec_select(llxjhSql.c_str(), 2, "读取联络线计划数据");
 	if(retRedNum!=SDNUM){
-		cout<<"####联络线计划数据有问题"<<endl;
+		cout<<"####联络线计划数据错误"<<endl;
+		writeAlgResult2DB("联络线计划数据错误","");
 		exit(INTERCONECTION_DATA_ERROR);//联络线计划数据有问题
 	}
 	for(int i=0;i<retRedNum;i++)
@@ -116,7 +135,7 @@ void readFhyc(string strDate)
 
 
 	retRedNum = dmdb->exec_select(xnyycSql.c_str(), 2, "读取新能源预测数据");
-	if(retRedNum==SDNUM||retRedNum==0){
+//	if(retRedNum==SDNUM||retRedNum==0){
 		for(int i=0;i<retRedNum;i++)
 		{
 			string sdStr = dmdb->get_select_data(i,0).c_str();
@@ -125,16 +144,16 @@ void readFhyc(string strDate)
 			double valDouble = atof(valStr.c_str());
 			xnyycGloble[sdInt]= valDouble;
 		}
-	}else{
-		cout<<"####新能源预测数据有问题"<<endl;
-		exit(NEW_ENERGY_DATA_ERROR);//新能源预测数据有问题
-	}
+//	}else{
+//		cout<<"####新能源预测数据有问题"<<endl;
+//		exit(NEW_ENERGY_DATA_ERROR);//新能源预测数据有问题
+//	}
 
 	string sdjhSql = "select sd,sum(sz) from HLJJHDB.HLJJHDB.SDJH \
               where rq='"+strDate+"' group by sd order by sd ";
 
 	retRedNum = dmdb->exec_select(sdjhSql.c_str(), 2, "读取水电计划数据");
-	if(retRedNum==SDNUM||retRedNum==0){
+//	if(retRedNum==SDNUM||retRedNum==0){
 		for(int i=0;i<retRedNum;i++)
 		{
 			string sdStr = dmdb->get_select_data(i,0).c_str();
@@ -143,10 +162,10 @@ void readFhyc(string strDate)
 			double valDouble = atof(valStr.c_str());
 			sdjhGloble[sdInt]= valDouble;
 		}
-	}else{
-		cout<<"水电计划数据有问题"<<endl;
-		exit(WATER_SCHED_DATA);//新能源预测数据有问题
-	}
+//	}else{
+//		cout<<"水电计划数据有问题"<<endl;
+//		exit(WATER_SCHED_DATA);//新能源预测数据有问题
+//	}
 
 	for(int i=1;i<=SDNUM;i++){
 		ddljhInputFl[i] =fhycGloble[i]+llxjhGloble[i]-xnyycGloble[i]-sdjhGloble[i];
@@ -158,15 +177,17 @@ void readFhyc(string strDate)
 /**
  *读取日定电量
  */
-void readRDDL()
+void readRDDL(string strDate)
 {
 	long long retRedNum =-1;
 
 
-	string maxRqInRddl = "select max(rq) from HLJJHDB.HLJJHDB.RDDL";
+	string maxRqInRddl = "select max(rq) from HLJJHDB.HLJJHDB.RDDL "
+			 "where rq<='"+strDate+"'";
 	retRedNum = dmdb->exec_select(maxRqInRddl.c_str(), 1, "读取日定电量日期");
 	if(retRedNum<=0){
-		cout<<"####日定电量日期有问题"<<endl;
+		cout<<"####日定电量没有最新数据"<<endl;
+		writeAlgResult2DB("日定电量没有最新数据","");
 		exit(-104);
 	}
 	string maxRq = dmdb->get_select_data(0,0);
@@ -175,7 +196,8 @@ void readRDDL()
 	         where rq='"+maxRq+"'";
 	retRedNum = dmdb->exec_select(jzRddlSql.c_str(), 5, "读取日定电量数据");
 	if(retRedNum<=0){
-		cout<<"####机组日定电量日期有问题"<<endl;
+		cout<<"####机组日定电量数据错误"<<endl;
+		writeAlgResult2DB("机组日定电量数据错误","");
 		exit(-105);
 	}
 
@@ -209,7 +231,7 @@ void readAllDataFromDb(string strDate)
 {
 	readAlgorithmPara();
 	readFhyc(strDate);
-	readRDDL();
+	readRDDL(strDate);
 
 }
 
@@ -243,6 +265,7 @@ void writeToDb(string strDate)
 			if(ret!=0)
 			{
 				cout<<"####插入数据出错"<<endl;
+				writeAlgResult2DB("数据库错误，插入数据出错","");
 				exit(106);
 			}else
 				insertNum++;
@@ -252,6 +275,7 @@ void writeToDb(string strDate)
 	}
 	cout<<"插入"<<insertNum<<"条数据"<<endl;
 }
+
 void algrithm(string strDate)
 {
 	readConfig();
@@ -271,7 +295,6 @@ void algrithm(string strDate)
 }
 int main(long argc,char **argv)
 {
-//	int sd = sj2sd("23:45",96);
 	string strDate = argv[1];
 	readConfig();
 
@@ -287,7 +310,8 @@ int main(long argc,char **argv)
 	algrithm(strDate);
 
 	delete(dmdb);
-	printf("####成功!\n");
-	return 0;
+	writeAlgResult2DB("算法完成","");
+	printf("####算法成功完成!\n");
+
 }
 //end of file

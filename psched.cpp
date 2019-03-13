@@ -5,6 +5,7 @@
 #include"math.h"
 #include<iostream>
 #include<sstream>
+#include"sched_bid.h"
 using namespace::std;
 //globals
 int g_maxsdSpan;
@@ -34,6 +35,7 @@ long rampSd;
 long rampSd_hydro;
 long rampSd_plant;
 long rampSd_unit;
+#define SQLSTRLENL 2048
 ////////////////////////////////////////////////////////////
 
 double grossFixbas[100];
@@ -49,6 +51,7 @@ double micPrice   [100];
 double mwStep;
 char warningMsg[10000]={0};
 char warningMsg1[10000]={0};
+char algMsg[1024] = {0};
 string sd2sj[]={"00:15","00:30","00:45",
 		"01:00","01:15","01:30","01:45",
 		"02:00","02:15","02:30","02:45",
@@ -101,6 +104,7 @@ string sd2sj288[]={"00:05","00:10","00:15","00:20","00:25","00:30","00:35","00:4
 		"23:05","23:10","23:15","23:20","23:25","23:30","23:35","23:40","23:45","23:50","23:55","24:00"
 };
 ////////////////////////////////////////////////////////////
+
 /**
  * 96 sd num to 288 sd num
  * mw:input
@@ -162,16 +166,16 @@ void compensateLoad()
 			mp = mp->next;
 		}
 
-		if(maxPowerOffsetSum[i]<wloadOffset[i]||
-				-minPowerOffsetSum[i]>wloadOffset[i])
-		{
-			if(wloadOffset[i]>SMLL)
-				sprintf(warningMsg1,"%s\n####在%s处负荷差额:%-8.2lf,上可调:%-8.2lf，仍存在差额:%-8.2lf",warningMsg1,sd2sj[i-1].c_str(),
-						wloadOffset[i],maxPowerOffsetSum[i],wloadOffset[i]-maxPowerOffsetSum[i]);
-			else
-				sprintf(warningMsg1,"%s\n####在%s处负荷差额:%-8.2lf,上可调:%-8.2lf，仍存在差额:%-8.2lf",warningMsg1,sd2sj[i-1].c_str(),
-						wloadOffset[i],minPowerOffsetSum[i],wloadOffset[i]+minPowerOffsetSum[i]);
-		}
+//		if(maxPowerOffsetSum[i]<wloadOffset[i]||
+//				-minPowerOffsetSum[i]>wloadOffset[i])
+//		{
+//			if(wloadOffset[i]>SMLL)
+//				sprintf(warningMsg1,"%s\n####在%s处负荷差额:%-8.2lf,上可调:%-8.2lf，仍存在差额:%-8.2lf",warningMsg1,sd2sj[i-1].c_str(),
+//						wloadOffset[i],maxPowerOffsetSum[i],wloadOffset[i]-maxPowerOffsetSum[i]);
+//			else
+//				sprintf(warningMsg1,"%s\n####在%s处负荷差额:%-8.2lf,上可调:%-8.2lf，仍存在差额:%-8.2lf",warningMsg1,sd2sj[i-1].c_str(),
+//						wloadOffset[i],minPowerOffsetSum[i],wloadOffset[i]+minPowerOffsetSum[i]);
+//		}
 		mp = balanceMicData;
 		while(NULL!=mp)
 		{
@@ -200,8 +204,9 @@ void compensateLoad()
 	}
 
 
-	if(warningMsg1[0]!=0)
-		sprintf(warningMsg,"####%s%s","平衡机调节能力不足",warningMsg1);
+	if(warningMsg1[0]!=0){
+//		sprintf(warningMsg,"####%s%s","平衡机调节能力不足",warningMsg1);
+	}
 }
 
 
@@ -378,14 +383,17 @@ double micSched(double *mw,double *wload,long sd)
 	double minSched[1000];
 //	maxSched_fun(maxSched,minSched,micmx,sd);//-2-max/minSched
 	maxSched_fun(maxSched,minSched,micmn,sd);
+
 	if(wload[sd]<minSched[0])
 	{
 		printf("\nError --- %ld",__LINE__);
 		printf("\n wload   =%lf, sd=%ld",wload[sd],sd);
 		printf("\n minSched=%lf",minSched[0]);
 		printf("\n");
-		printf("####在时段%d，时间：%s处不满足所有机组最小出力约束条件，修正后空间：%f,机组最小出力：%f",
+
+		sprintf(algMsg,"####在时段%d，时间：%s处不满足所有机组最小出力约束条件，修正后空间：%.2f,机组最小出力：%.2f",
 				sd,sd2sj[sd-1].c_str(),wload[sd],minSched[0]);
+		writeAlgResult2DB("计算失败：负荷需求空间低于火电最小方式",algMsg);
 		exit(212);
 	}
 	if(wload[sd]>maxSched[0])
@@ -394,8 +402,9 @@ double micSched(double *mw,double *wload,long sd)
 		printf("\n wload   =%lf, sd=%ld",wload[sd],sd);
 		printf("\n minSched=%lf",minSched[0]);
 		printf("\n");
-		printf("####在时段%d，时间：%s处不满足所有机组最大出力约束条件，修正后空间：%f,机组最大出力：%f",
+		sprintf(algMsg,"####在时段%d，时间：%s处不满足所有机组最大出力约束条件，修正后空间：%.2f,机组最大出力：%.2f",
 				sd,sd2sj[sd-1].c_str(),wload[sd],maxSched[0]);
+		writeAlgResult2DB("计算失败：负荷需求空间高于火电最大方式",algMsg);
 		exit(212);
 	}
 	////////////////////////////////////////////////////////////
@@ -522,7 +531,8 @@ void unitSched(double *wgen,double *wload,long sd1,long sdnum,struct fixstr *fp)
 		printf("\n mwhmax=%lf, mwh0=%lf",mwhmax,fp->mwh0);
 		printf("\n mwhmin=%lf",mwhmin);
 		printf("\n");
-		printf("####%s设置电量不满足机组上下限，上限：%f,下限：%f，定电量：%f",fp->descr,mwhmax,mwhmin,fp->mwh0);
+		sprintf(algMsg,"####%s设置电量不满足机组上下限，上限：%.2f,下限：%.2f，定电量：%.2f",fp->descr,mwhmax,mwhmin,fp->mwh0);
+		writeAlgResult2DB("电量不满足机组功率上下限",algMsg);
 		exit(109);
 	}
 	////////////////////////////////////////////////////////////

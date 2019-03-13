@@ -160,6 +160,9 @@ typedef struct hspar
 }HSPAR;
 ////////////////////////////////////////////////////////////
 //function prototypes
+void getSysTime(char *ctimeStr);
+void getSysDate(char *cdateStr);
+void getSysDateNoLine(char *cdateStr);
 bool isarg(char *arg,long argc,char **argv);
 bool iscond(double v,double v0,long mel);
 bool isfind(char *filename);

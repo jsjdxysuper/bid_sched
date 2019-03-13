@@ -5,8 +5,8 @@
  * @version 0.0.1
  * @date 2014-05-06
  */
-#ifndef OPERATOR_CONFIG_H__
-#define OPERATOR_CONFIG_H__
+#ifndef _OPERATOR_CONFIG_H__
+#define _OPERATOR_CONFIG_H__
 
 #include <iostream>
 #include <sstream>

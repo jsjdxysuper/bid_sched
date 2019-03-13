@@ -13,6 +13,7 @@ dm_henv henv=NULL;   //environment handle
 dm_hdbc hdbc = NULL;   //connection handle
 dm_hstmt hsmt = NULL;;  // statement handle
 dm_bool sret = NULL;;   //return code
+
 /********************************************
 * note: init database connection
 * return: false: -1, -2,-3,-4; true: 0

@@ -1,0 +1,13 @@
+eclipse.preferences.version=1
+encoding/<project>=GBK
+encoding/common.cpp=UTF-8
+encoding/common.h=UTF-8
+encoding/dmdb.cpp=UTF-8
+encoding/dmdb.h=UTF-8
+encoding/gen288Point.cpp=UTF-8
+encoding/operate_config.cpp=UTF-8
+encoding/operate_config.h=UTF-8
+encoding/psched.cpp=UTF-8
+encoding/psched.h=UTF-8
+encoding/sched_bid.cxx=UTF-8
+encoding/sched_mwh.cxx=UTF-8

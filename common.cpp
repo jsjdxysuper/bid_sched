@@ -49,7 +49,39 @@ char seg8  [100];
 char seg9  [100];
 char *token;
 ////////////////////////////////////////////////////////////
+void getSysTime(char *ctimeStr)
+{
+	time_t tt = time(NULL);//这句返回的只是一个时间cuo
+	tm* t= localtime(&tt);
+	sprintf(ctimeStr,"%d-%02d-%02d %02d:%02d:%02d\n",
+	 t->tm_year + 1900,
+	 t->tm_mon + 1,
+	 t->tm_mday,
+	 t->tm_hour,
+	 t->tm_min,
+	 t->tm_sec);
 
+}
+void getSysDate(char *cdateStr)
+{
+	time_t tt = time(NULL);//这句返回的只是一个时间cuo
+	tm* t= localtime(&tt);
+	sprintf(cdateStr,"%d-%02d-%02d\n",
+	 t->tm_year + 1900,
+	 t->tm_mon + 1,
+	 t->tm_mday);
+
+}
+
+void getSysDateNoLine(char *cdateStr)
+{
+	time_t tt = time(NULL);//这句返回的只是一个时间cuo
+	tm* t= localtime(&tt);
+	sprintf(cdateStr,"%d%02d%02d",
+	 t->tm_year + 1900,
+	 t->tm_mon + 1,
+	 t->tm_mday);
+}
 long lookup2(double v0,double *v,long n)
 {
 	for(long i=1;i<n;i++)
